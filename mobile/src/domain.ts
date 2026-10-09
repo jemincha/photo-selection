@@ -1,16 +1,24 @@
 export type Choice = 'dislike' | 'unsure' | 'like';
-export type Photo = { id:string; requestId:string; filename:string; mime:string; width:number; height:number; bytes:number; original:string; thumbnail:string };
+export type Album = {id:string;title:string;createdAt:string;members:Member[]};
+export type Submission = {userId:string;selectedIds:string[];createdAt:string};
+export type Photo = { id:string; requestId:string; filename:string; mime:string; width:number; height:number; bytes:number; sha256?:string; original:string; thumbnail:string };
 export type Member = { userId:string; nickname:string };
 export type Reaction = { photoId:string; userId:string; value:Choice };
 export type Comment = { id:string; photoId:string|null; userId:string; body:string; createdAt:string };
-export type Request = { id:string; ownerId:string; title:string; inviteToken:string; status:'selecting'|'confirmed'; selectedIds:string[]; createdAt:string; members:Member[]; photos:Photo[]; reactions:Reaction[]; comments:Comment[] };
+export type Request = { id:string; albumId?:string; submissions?:Submission[]; ownerId:string; title:string; inviteToken:string; status:'selecting'|'confirmed'; selectedIds:string[]; createdAt:string; members:Member[]; photos:Photo[]; reactions:Reaction[]; comments:Comment[] };
 export const choiceLabel:Record<Choice,string> = {dislike:'별로',unsure:'글쎄',like:'좋아'};
 export function assertOpen(request:Request){if(request.status!=='selecting')throw new Error('이미 확정된 요청이에요.');}
 export function assertMember(request:Request,userId:string){if(!request.members.some(m=>m.userId===userId))throw new Error('이 요청에 참여할 권한이 없어요.');}
 export function assertOwner(request:Request,userId:string){assertMember(request,userId);if(request.ownerId!==userId)throw new Error('요청자만 할 수 있는 작업이에요.');}
 export function setChoice(request:Request,userId:string,photoId:string,value:Choice|null):Request {
  assertMember(request,userId);assertOpen(request);if(!request.photos.some(p=>p.id===photoId))throw new Error('사진을 찾을 수 없어요.');
- return {...request,reactions:[...request.reactions.filter(r=>!(r.photoId===photoId&&r.userId===userId)),...(value?[{photoId,userId,value}]:[])]};
+ return {...request,submissions:request.submissions?.filter(s=>s.userId!==userId),reactions:[...request.reactions.filter(r=>!(r.photoId===photoId&&r.userId===userId)),...(value?[{photoId,userId,value}]:[])]};
+}
+export function submitSelection(request:Request,userId:string):Request {
+ assertMember(request,userId);assertOpen(request);
+ if(!request.photos.length||request.photos.some(p=>!choiceFor(request,userId,p.id)))throw new Error('모든 사진을 분류한 뒤 제출해주세요.');
+ const submission={userId,selectedIds:request.photos.filter(p=>choiceFor(request,userId,p.id)==='like').map(p=>p.id),createdAt:new Date().toISOString()};
+ return {...request,submissions:[...(request.submissions||[]).filter(s=>s.userId!==userId),submission]};
 }
 export function confirm(request:Request,userId:string,ids:string[]):Request {
  assertOwner(request,userId);assertOpen(request);if(!ids.length||new Set(ids).size!==ids.length||ids.some(id=>!request.photos.some(p=>p.id===id)))throw new Error('확정할 사진을 다시 확인해주세요.');

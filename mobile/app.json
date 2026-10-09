@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "사진 셀렉",
+    "slug": "photo-selection",
+    "scheme": "photoselection",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": false,
+      "usesAppleSignIn": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-apple-authentication",
+      ["expo-image-picker", {"photosPermission": "친구에게 셀렉을 요청할 사진을 선택해요.", "cameraPermission": false, "microphonePermission": false}],
+      ["expo-media-library", {"photosPermission": "확정 사진을 확인하기 위해 사진 권한을 사용해요.", "savePhotosPermission": "확정한 원본 사진을 사진첩에 저장해요.", "isAccessMediaLocationEnabled": false}]
+    ]
+  }
+}
