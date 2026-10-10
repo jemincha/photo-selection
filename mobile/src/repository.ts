@@ -5,7 +5,8 @@ import { Platform } from 'react-native';
 import { manipulateAsync,SaveFormat } from 'expo-image-manipulator';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import {supabase,checked} from './backend';
-import {sha256} from './integrity';
+import {sha256,sha256Blob} from './integrity';
+import {createWebThumbnail} from './web-photo';
 import {storePhotoFiles,photoFileUrl} from './photo-storage';
 import {uploadError,UploadStage} from './upload-error';
 import {Album,Request,Photo,Choice,submitSelection,assertOpen,assertOwner,setChoice,confirm,addComment} from './domain';
@@ -37,28 +38,47 @@ export async function react(r:Request,userId:string,photoId:string,value:Choice|
 export async function comment(r:Request,userId:string,photoId:string|null,body:string){if(supabase){checked(await supabase.rpc('add_comment',{p_request:r.id,p_photo:photoId,p_body:body}));return;}await replace(r.id,current=>addComment(current,userId,photoId,body,randomId()));}
 export async function finalize(r:Request,userId:string,ids:string[]){if(supabase){checked(await supabase.rpc('confirm_request',{p_request:r.id,p_selected:ids}));return;}await replace(r.id,current=>confirm(current,userId,ids));}
 async function bytes(uri:string){if(Platform.OS==='web')return (await fetch(uri)).arrayBuffer();return new File(uri).arrayBuffer();}
-export async function upload(r:Request,userId:string,asset:ImagePickerAsset,photoId:string,onStage?:(stage:UploadStage)=>void):Promise<void>{
+export type UploadAsset=Omit<ImagePickerAsset,'file'>&{file?:Blob};
+export async function upload(r:Request,userId:string,asset:UploadAsset,photoId:string,onStage?:(stage:UploadStage)=>void):Promise<Photo|void>{
  assertOwner(r,userId);assertOpen(r);
  if(supabase){const existing=checked(await supabase.from('photos').select('id').eq('id',photoId));if(existing.length)return;}
+ else{const existing=local.find(item=>item.id===r.id)?.photos.find(photo=>photo.id===photoId);if(existing)return existing;}
  const mime=asset.mimeType||'image/jpeg';if(!['image/jpeg','image/png','image/heic','image/heif','image/webp'].includes(mime))throw new Error('JPEG·PNG·HEIC·WebP 사진만 지원해요.');
  const ext=mime==='image/heic'?'heic':mime==='image/heif'?'heif':mime==='image/png'?'png':mime==='image/webp'?'webp':'jpg';
  const filename=`${photoId}.${ext}`;
+ if(Platform.OS==='web')return uploadWeb(r,userId,asset,photoId,mime,filename,onStage);
  onStage?.('read');
  let originalBytes:ArrayBuffer;
  try{originalBytes=asset.file?await asset.file.arrayBuffer():await bytes(asset.uri);if(!originalBytes.byteLength)throw new Error('사진 파일이 비어 있어요.');}catch(error){throw uploadError('read',error,mime);}
  if(originalBytes.byteLength>25*1024*1024)throw new Error('사진 한 장은 최대 25MB까지 지원해요.');
- const checksum=await sha256(originalBytes);
+ onStage?.('hash');const checksum=await sha256(originalBytes);
  onStage?.('preview');
  let thumb:Awaited<ReturnType<typeof manipulateAsync>>;
  try{thumb=await manipulateAsync(asset.uri,[{resize:{width:720}}],{compress:.75,format:SaveFormat.JPEG});}catch(error){throw uploadError('preview',error,mime);}
  onStage?.(supabase?'transfer':'store');
  if(supabase){const originalPath=`${r.id}/original/${photoId}/${filename}`,thumbnailPath=`${r.id}/thumbnail/${photoId}.jpg`;try{checked(await supabase.storage.from('request-photos').upload(originalPath,originalBytes,{contentType:mime}));checked(await supabase.storage.from('request-photos').upload(thumbnailPath,await bytes(thumb.uri),{contentType:'image/jpeg'}));checked(await supabase.rpc('register_photo',{p_id:photoId,p_request:r.id,p_filename:filename,p_mime:mime,p_width:asset.width,p_height:asset.height,p_bytes:originalBytes.byteLength,p_sha256:checksum}));}catch(error){await supabase.storage.from('request-photos').remove([originalPath,thumbnailPath]);throw error;}return;}
  onStage?.('store');
- let original=asset.uri,thumbnail=thumb.uri;
- if(Platform.OS!=='web'){const originalFile=new File(Paths.document,filename);originalFile.write(new Uint8Array(originalBytes));const thumbFile=new File(Paths.document,`${photoId}-thumb.jpg`);new File(thumb.uri).copy(thumbFile);original=originalFile.uri;thumbnail=thumbFile.uri;}
- else{try{const saved=await storePhotoFiles(photoId,new Blob([originalBytes],{type:mime}),await (await fetch(thumb.uri)).blob());original=saved.original;thumbnail=saved.thumbnail;}catch(error){throw uploadError('store',error,mime);}}
+ const originalFile=new File(Paths.document,filename);originalFile.write(new Uint8Array(originalBytes));const thumbFile=new File(Paths.document,`${photoId}-thumb.jpg`);new File(thumb.uri).copy(thumbFile);const original=originalFile.uri,thumbnail=thumbFile.uri;
  const photo:Photo={id:photoId,requestId:r.id,filename,mime,width:asset.width,height:asset.height,bytes:originalBytes.byteLength,sha256:checksum,original,thumbnail};
  try{await replace(r.id,current=>{assertOwner(current,userId);assertOpen(current);return current.photos.some(p=>p.id===photo.id)?current:{...current,submissions:[],photos:[...current.photos,photo]};});}catch(error){throw uploadError('store',error,mime);}
+}
+async function uploadWeb(r:Request,userId:string,asset:UploadAsset,photoId:string,mime:string,filename:string,onStage?:(stage:UploadStage)=>void):Promise<Photo>{
+ onStage?.('read');let original:Blob;
+ try{original=asset.file||await (await fetch(asset.uri)).blob();if(!original.size)throw new Error('사진 파일이 비어 있어요.');if(original.size>25*1024*1024)throw new Error('사진 한 장은 최대 25MB까지 지원해요.');}catch(error){throw uploadError('read',error,mime)}
+ onStage?.('hash');const checksum=await sha256Blob(original);
+ onStage?.('preview');let preview:Awaited<ReturnType<typeof createWebThumbnail>>;
+ try{preview=await createWebThumbnail(original)}catch(error){throw uploadError('preview',error,mime)}
+ let originalRef:string,thumbnailRef:string;
+ if(supabase){
+  onStage?.('transfer');originalRef=`${r.id}/original/${photoId}/${filename}`;thumbnailRef=`${r.id}/thumbnail/${photoId}.jpg`;const uploaded:string[]=[];
+  try{checked(await supabase.storage.from('request-photos').upload(originalRef,original,{contentType:mime}));uploaded.push(originalRef);checked(await supabase.storage.from('request-photos').upload(thumbnailRef,preview.blob,{contentType:'image/jpeg'}));uploaded.push(thumbnailRef);checked(await supabase.rpc('register_photo',{p_id:photoId,p_request:r.id,p_filename:filename,p_mime:mime,p_width:preview.width,p_height:preview.height,p_bytes:original.size,p_sha256:checksum}));}
+  catch(error){if(uploaded.length){const registered=await supabase.from('photos').select('id').eq('id',photoId);if(!registered.error&&!registered.data?.length)await supabase.storage.from('request-photos').remove(uploaded);}throw uploadError('transfer',error,mime)}
+ }else{
+  onStage?.('store');try{const saved=await storePhotoFiles(photoId,original,preview.blob);originalRef=saved.original;thumbnailRef=saved.thumbnail;}catch(error){throw uploadError('store',error,mime)}
+ }
+ const photo:Photo={id:photoId,requestId:r.id,filename,mime,width:preview.width,height:preview.height,bytes:original.size,sha256:checksum,original:originalRef,thumbnail:thumbnailRef};
+ if(!supabase){try{await replace(r.id,current=>{assertOwner(current,userId);assertOpen(current);return current.photos.some(p=>p.id===photoId)?current:{...current,submissions:[],photos:[...current.photos,photo]}})}catch(error){throw uploadError('store',error,mime)}}
+ return photo;
 }
 export async function originalUrl(photo:Photo){if(!supabase)return Platform.OS==='web'?photoFileUrl(photo.original):photo.original;return checked(await supabase.storage.from('request-photos').createSignedUrl(photo.original,600)).signedUrl;}
 export async function localFriend(r:Request){if(supabase)throw new Error('로컬 모드에서만 사용할 수 있어요.');await joinRequest(r.inviteToken,'local-friend','테스트 친구');}

@@ -12,3 +12,4 @@ dist-ios/
 !.env.example
 !mobile/.env.example
 *.log
+/mobile/.upload-fixtures/

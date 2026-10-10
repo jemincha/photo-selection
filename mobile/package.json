@@ -43,7 +43,7 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "lint": "expo lint",
-    "test": "node --experimental-strip-types --test tests/domain.test.ts tests/integrity.test.ts tests/photo-storage.test.ts",
+    "test": "node --experimental-strip-types --test tests/domain.test.ts tests/integrity.test.ts tests/photo-storage.test.ts tests/upload-queue.test.ts",
     "export:web": "expo export --platform web"
   },
   "private": true
