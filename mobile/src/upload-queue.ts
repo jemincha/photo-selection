@@ -27,10 +27,23 @@ export class UploadQueue{
    const match=selected.find(candidate=>!used.has(candidate.id)&&candidate.filename===item.filename&&candidate.bytes===item.bytes&&candidate.mime===item.mime);
    if(!match)return item;used.add(match.id);return {...item,file:match.file,status:'waiting' as const,error:undefined};
   });if(!items.some(item=>item.file&&!item.stored))throw new Error('목록에 남은 사진과 같은 파일을 선택해주세요. 완료한 사진은 다시 추가하지 않아요.');}
-  this.emit({items,busy:true,restored:false,error:''});
-  try{await this.storage.manifest(items);await this.prepareAndProcess(transport)}catch(error){this.emit({error:error instanceof Error?error.message:String(error)})}finally{this.emit({busy:false})}
+  await this.run(items,transport);
  }
- async resume(transport:UploadTransport){await this.load();if(this.snapshot.busy)return;this.emit({busy:true,error:'',restored:false});try{await this.storage.manifest(this.snapshot.items);await this.prepareAndProcess(transport)}catch(error){this.emit({error:error instanceof Error?error.message:String(error)})}finally{this.emit({busy:false})}}
+ async resume(transport:UploadTransport){
+  await this.load();if(this.snapshot.busy)return;
+  await this.run(this.snapshot.items,transport);
+ }
+ private async run(items:UploadItem[],transport:UploadTransport){
+  this.emit({items,busy:true,restored:false,error:''});
+  try{
+   await this.storage.manifest(items);
+   await this.prepareAndProcess(transport);
+  }catch(error){
+   this.emit({error:error instanceof Error?error.message:String(error)});
+  }finally{
+   this.emit({busy:false});
+  }
+ }
  private async prepareAndProcess(transport:UploadTransport){
   // Preserve names first, then File handles before any original is decoded.
   // If the browser dies during this phase, even missing files stay in the list.

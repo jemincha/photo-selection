@@ -2,6 +2,11 @@ import type {QueueStorage,UploadItem} from './upload-queue';
 let database:Promise<IDBDatabase>|undefined;
 function open(){if(!database)database=new Promise((resolve,reject)=>{const request=indexedDB.open('photo-selection-upload-queue',1);request.onupgradeneeded=()=>{request.result.createObjectStore('sessions');request.result.createObjectStore('items')};request.onsuccess=()=>{request.result.onversionchange=()=>request.result.close();resolve(request.result)};request.onerror=()=>{database=undefined;reject(request.error)}});return database;}
 function complete(tx:IDBTransaction){return new Promise<void>((resolve,reject)=>{tx.oncomplete=()=>resolve();tx.onabort=()=>reject(tx.error||new Error('임시 사진 보관에 실패했어요.'));tx.onerror=()=>reject(tx.error)})}
+export async function removeUploadSessions(requestId?:string){
+ const db=await open(),tx=db.transaction(['sessions','items'],'readwrite'),done=complete(tx);
+ for(const name of ['sessions','items']){const store=tx.objectStore(name);if(!requestId)store.clear();else{const cursor=store.openCursor();cursor.onsuccess=()=>{const entry=cursor.result;if(!entry)return;if(String(entry.key).split('/')[0].endsWith(`:${requestId}`))entry.delete();entry.continue();};}}
+ await done;
+}
 // File blobs live in IndexedDB, never in localStorage or React serialization.
 export function queueStorage(scope:string):QueueStorage{
  const key=(id:string)=>`${scope}/${id}`;

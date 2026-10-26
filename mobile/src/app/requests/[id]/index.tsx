@@ -6,7 +6,7 @@ import * as Clipboard from 'expo-clipboard';
 import {useRequest} from '../../../request-hook';
 import {cloudEnabled} from '../../../store';
 import {choiceFor,choiceLabel,nickname} from '../../../domain';
-import {Page,Button,Notice,PhotoImage,Comments,styles,useTask,TaskState} from '../../../ui';
+import {SubmissionCombinations,Page,Button,Notice,PhotoImage,Comments,styles,useTask,TaskState} from '../../../ui';
 export default function Event(){const {id,store,request,owner,locked}=useRequest(),task=useTask();const [filter,setFilter]=useState('all'),[showComments,setShowComments]=useState(false),[tools,setTools]=useState(false),[testing,setTesting]=useState(false),[copied,setCopied]=useState(false);
  if(!request)return <Page title="요청 불러오기"><TaskState busy={store.loading} error={store.error}/><Button label="다시 불러오기" onPress={()=>void store.refresh()}/></Page>;
  const web=process.env.EXPO_PUBLIC_WEB_URL?.replace(/\/$/,'');const invite=web?`${web}/invite/${request.inviteToken}`:Linking.createURL(`/invite/${request.inviteToken}`);
@@ -25,7 +25,7 @@ export default function Event(){const {id,store,request,owner,locked}=useRequest
  {request.photos.length>0&&!photos.length&&<Text style={styles.muted}>이 분류에 해당하는 사진이 없어요.</Text>}
  <View style={styles.grid}>{photos.map(photo=>{const choice=choiceFor(request,store.userId,photo.id);return <Pressable key={photo.id} accessibilityRole="button" accessibilityLabel={`사진 ${request.photos.indexOf(photo)+1}, ${choice?choiceLabel[choice]:'미분류'}`} onPress={()=>detail(photo.id)} style={styles.tile}><PhotoImage photo={photo}/><Text style={styles.badge}>{choice?choiceLabel[choice]:'미분류'}</Text></Pressable>})}</View>
  {owner&&request.photos.length>0&&!locked&&<View style={styles.card}><Text style={styles.subtitle}>게시할 최종 사진</Text><Text style={styles.muted}>참여자의 셀렉을 참고해 내가 확정해요. 확정하면 분류와 의견 수정을 마쳐요.</Text><Button label="모두의 조합 비교 · 최종 확정" onPress={()=>router.push(`/requests/${id}/select`)}/></View>}
- {!!request.submissions?.length&&<><Text style={styles.subtitle}>참여자가 고른 조합</Text>{request.submissions.map(sub=><View key={sub.userId} style={styles.card}><Text style={styles.badge}>{nickname(request,sub.userId)} · 좋아 {sub.selectedIds.length}장</Text><View style={styles.grid}>{request.photos.filter(p=>sub.selectedIds.includes(p.id)).map(p=><View key={p.id} style={styles.tile}><PhotoImage photo={p}/></View>)}</View>{!sub.selectedIds.length&&<Text style={styles.muted}>좋아로 고른 사진이 없어요.</Text>}</View>)}</>}
+ <SubmissionCombinations request={request}/>
  <Button label={showComments?'전체 의견 접기':'전체 의견 (선택)'} onPress={()=>setShowComments(!showComments)}/>{showComments&&<Comments request={request}/>}
  <Button label="앨범으로 돌아가기" onPress={()=>router.replace(`/albums/${request.albumId}`)}/>
  </Page>;

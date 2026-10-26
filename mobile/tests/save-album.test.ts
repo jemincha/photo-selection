@@ -1,0 +1,12 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {saveAlbum} from '../src/save-album.ts';
+import type {AlbumSaveOperations,AlbumSaveState} from '../src/save-album.ts';
+import type {Photo} from '../src/domain.ts';
+const photos=['a','b'].map(id=>({id,filename:`${id}.jpg`}) as Photo);
+function fixture(){const state:AlbumSaveState={assets:{}},created:string[]=[],added:string[]=[],persisted:AlbumSaveState[]=[];
+ const ops:AlbumSaveOperations={findAlbum:async()=>undefined,createAsset:async p=>{created.push(p.id);return `asset-${p.id}`;},createAlbum:async id=>{added.push(id);return 'album';},addToAlbum:async id=>{added.push(id);},persist:async value=>{persisted.push(structuredClone(value));}};return {state,created,added,persisted,ops};}
+test('album save checkpoints asset IDs before grouping and skips completed photos',async()=>{const f=fixture();assert.deepEqual(await saveAlbum(photos,f.state,f.ops),[]);assert.deepEqual(f.created,['a','b']);assert.deepEqual(f.added,['asset-a','asset-b']);assert.equal(f.persisted[1].assets.a.inAlbum,false);await saveAlbum(photos,f.state,f.ops);assert.equal(f.created.length,2);assert.equal(f.added.length,2);});
+test('album grouping failure retries the existing asset instead of duplicating it',async()=>{const f=fixture();f.ops.createAlbum=async()=>{throw new Error('denied')};assert.deepEqual(await saveAlbum(photos.slice(0,1),f.state,f.ops),['a.jpg']);assert.equal(f.state.assets.a.assetId,'asset-a');f.ops.createAlbum=async()=>'album';assert.deepEqual(await saveAlbum(photos.slice(0,1),f.state,f.ops),[]);assert.deepEqual(f.created,['a']);assert.equal(f.state.assets.a.inAlbum,true);});
+test('asset checkpoint failure stops the batch and preserves ID for retry',async()=>{const f=fixture();f.ops.persist=async value=>{if(value.assets.a)throw new Error('disk full')};await assert.rejects(saveAlbum(photos,f.state,f.ops),/disk full/);assert.deepEqual(f.created,['a']);assert.equal(f.state.assets.a.inAlbum,false);f.ops.persist=async()=>{};await saveAlbum(photos,f.state,f.ops);assert.deepEqual(f.created,['a','b']);});
+test('one corrupt original does not block the other files or count as complete',async()=>{const f=fixture();const create=f.ops.createAsset;f.ops.createAsset=async p=>{if(p.id==='a')throw new Error('hash mismatch');return create(p)};assert.deepEqual(await saveAlbum(photos,f.state,f.ops),['a.jpg']);assert.equal(f.state.assets.a,undefined);assert.equal(f.state.assets.b.inAlbum,true);});

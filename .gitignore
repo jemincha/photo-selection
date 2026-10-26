@@ -12,4 +12,9 @@ dist-ios/
 !.env.example
 !mobile/.env.example
 *.log
+.code-review-graph/
+.claude-flow/
+supabase/.temp/
 /mobile/.upload-fixtures/
+/release/site/
+/release/legal-settings.json

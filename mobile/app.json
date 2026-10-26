@@ -8,8 +8,7 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": false,
-      "usesAppleSignIn": true
+      "supportsTablet": false
     },
     "android": {
       "adaptiveIcon": {
@@ -27,9 +26,8 @@
     },
     "plugins": [
       "expo-router",
-      "expo-apple-authentication",
       ["expo-image-picker", {"photosPermission": "친구에게 셀렉을 요청할 사진을 선택해요.", "cameraPermission": false, "microphonePermission": false}],
-      ["expo-media-library", {"photosPermission": "확정 사진을 확인하기 위해 사진 권한을 사용해요.", "savePhotosPermission": "확정한 원본 사진을 사진첩에 저장해요.", "isAccessMediaLocationEnabled": false}]
+      ["expo-media-library", {"photosPermission": "사진 앱에서 설렉이 만든 앨범을 찾아 확정한 원본을 모아 저장해요.", "savePhotosPermission": "확정한 원본 사진을 사진 앱의 설렉 앨범에 저장해요.", "isAccessMediaLocationEnabled": false, "granularPermissions": ["photo"]}]
     ]
   }
 }

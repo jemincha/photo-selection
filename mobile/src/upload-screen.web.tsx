@@ -9,6 +9,9 @@ import {UploadQueue} from './upload-queue';
 import type {UploadItem,UploadTransport} from './upload-queue';
 import {queueStorage} from './upload-queue-storage';
 import {pickWebFiles} from './pick-web-files';
+import {pendingPhotos} from './pending-photos';
+import {RequestShare} from './request-share';
+import {RequestActions} from './request-actions';
 import type {UploadStage} from './upload-error';
 import {Page,Button,styles,useTask,TaskState} from './ui';
 
@@ -23,7 +26,7 @@ function itemFor(file:File):UploadItem{
  if(!file.size||file.size>25*1024*1024)throw new Error(`${file.name}: 비어 있지 않은 25MB 이하 사진을 선택해주세요.`);
  return {id:randomId(),filename:file.name,mime,bytes:file.size,file,status:'waiting',durations:{}};
 }
-export default function Upload(){const context=useRequest();if(!context.request)return <Page title="사진 준비"><TaskState busy={context.store.loading} error={context.store.error}/></Page>;if(!context.owner||context.locked)return <Page title="사진 추가"><Text style={styles.text}>셀렉 중인 내 요청에만 사진을 추가할 수 있어요.</Text><Button label="요청으로" onPress={()=>router.replace(`/requests/${context.id}`)}/></Page>;return <WebUpload key={`${context.id}:${context.store.userId}`} context={context}/>;}
+export default function Upload(){const context=useRequest();if(!context.request)return <Page title="사진 준비"><TaskState busy={context.store.loading} error={context.store.error}/></Page>;if(!context.owner||context.locked)return <Page title="사진 준비"><Text style={styles.text}>이미 보낸 셀렉의 사진은 바꿀 수 없어요.</Text><Button label="결과 보기" onPress={()=>router.replace(`/requests/${context.id}/result`)}/></Page>;return <WebUpload key={`${context.id}:${context.store.userId}`} context={context}/>;}
 function WebUpload({context}:{context:ReturnType<typeof useRequest>}){
  const {id,store,request}=context,picker=useTask();const [queue]=useState(()=>getQueue(`${store.userId}:${id}`)),[details,setDetails]=useState(false),[pickerTime,setPickerTime]=useState<number|null>(null);
  const state=useSyncExternalStore(queue.subscribe,queue.getSnapshot,queue.getSnapshot);
@@ -36,12 +39,14 @@ function WebUpload({context}:{context:ReturnType<typeof useRequest>}){
   const pending=processing.catch(()=>{}).then(async()=>{const latest=await repo.loadRequest(id);const photo=await repo.upload(latest,store.userId,{uri:'',width:0,height:0,type:'image',mimeType:item.mime,file:item.file,fileName:item.filename,fileSize:item.bytes},item.id,onStage);if(photo?.thumbnail.startsWith('photo-file:'))result={thumbnail:await photoFileUrl(photo.thumbnail)};});
   processing=pending;return pending.then(()=>result);
  };
- const pick=()=>void picker.run(async()=>{const start=Date.now(),files=await pickWebFiles();setPickerTime(Date.now()-start);if(files.length){await queue.add(files.map(itemFor),transport);await store.refresh()}});
+ const pick=()=>void picker.run(async()=>{const start=Date.now(),files=await pickWebFiles();setPickerTime(Date.now()-start);if(files.length){if(!state.items.some(item=>item.status!=='done')&&files.length+(request?.photos.length||0)>30)throw new Error('셀렉 하나에는 최대 30장까지 담을 수 있어요.');await queue.add(files.map(itemFor),transport);await store.refresh()}});
  const resume=()=>void picker.run(async()=>{await queue.resume(transport);await store.refresh()});
+ useEffect(()=>{const files=pendingPhotos.get(id)?.web;if(!files)return;pendingPhotos.delete(id);void picker.run(async()=>{await queue.add(files.map(itemFor),transport);await store.refresh()});},[id,queue]); // eslint-disable-line react-hooks/exhaustive-deps
  const done=state.items.filter(item=>item.status==='done'),remaining=state.items.filter(item=>item.status!=='done'),missing=remaining.filter(item=>!item.file),complete=state.items.length>0&&!remaining.length;
+ if(request?.simple&&request.publishedAt)return <Page title="링크가 준비됐어요"><Text style={styles.muted}>{request.photos.length}장 · {request.title}</Text><RequestShare request={request}/></Page>;
  const primary=missing.length?'중단된 사진 다시 선택':remaining.length?'남은 사진 이어서 준비하기':complete?'사진 셀렉 시작하기':'사진 선택하고 추가하기';
- return <Page title={complete?'사진 준비 완료':'함께 고를 사진을 추가해요'} footer={<Button label={busy?'사진 준비 중…':primary} primary disabled={busy||!state.ready} onPress={()=>{if(missing.length||!state.items.length)pick();else if(remaining.length)resume();else router.replace({pathname:'/requests/[id]/photo',params:{id,photoId:state.items[0]?.id}})}}/>}>
-  <Text style={styles.muted}>{state.items.length?`${done.length} / ${state.items.length}장 완료`:'선택한 목록을 먼저 보관하고 한 장씩 준비해요. 최대 30장.'}</Text>
+ return <Page title={complete?'친구의 한 끗이 필요한 사진들':'함께 고를 사진을 추가해요'} footer={request?.simple&&complete?<RequestShare request={request}/>:<Button label={busy?'사진 준비 중…':primary} primary disabled={busy||!state.ready} onPress={()=>{if(missing.length||!state.items.length)pick();else if(remaining.length)resume();else router.replace({pathname:'/requests/[id]/photo',params:{id,photoId:state.items[0]?.id}})}}/>}>
+  <View style={[styles.row,{justifyContent:'space-between'}]}><Text style={[styles.muted,{flex:1}]}>{state.items.length?`${done.length} / ${state.items.length}장 완료`:'선택한 목록을 먼저 보관하고 한 장씩 준비해요. 셀렉당 최대 30장.'}</Text>{request&&<RequestActions request={request} disabled={busy}/>}</View>
   {state.restored&&<Text style={styles.text}>중단된 목록을 복원했어요. 이미 완료한 사진은 건너뛰고 이어서 준비할 수 있어요.</Text>}
   {picker.busy&&!state.busy&&<Text style={styles.muted}>사진 보관함에서 파일이 전달되기를 기다리고 있어요. iCloud 사진이면 원본 다운로드 시간이 포함될 수 있어요.</Text>}
   <TaskState busy={busy||!state.ready} error={picker.error||state.error}/><TaskState busy={false} error={store.error}/>
@@ -50,7 +55,7 @@ function WebUpload({context}:{context:ReturnType<typeof useRequest>}){
   {complete&&<Button label="사진 더 추가하기" disabled={busy} onPress={pick}/>}
   <Button label={details?'자세한 안내 접기':'처리 시간 · 사진 준비 도움말'} onPress={()=>setDetails(!details)}/>
   {details&&<Text style={styles.muted}>{pickerTime!==null?`사진 보관함 대기 ${seconds(pickerTime)} (직접 고른 시간과 iOS 파일 전달 시간이 함께 포함돼요).\n`:''}이 브라우저에 임시 보관된 사진은 같은 주소에서 다시 열면 복원해요. 파일 보관 전에 중단된 사진은 다시 선택해야 해요. 원본 형식과 품질은 유지하고, 미리보기만 작게 만들어요. HEIC 처리는 Safari 지원 여부에 따라 달라요.</Text>}
-  <Button label={complete?'사진 목록 · 친구 초대':'사진 목록으로'} disabled={busy} onPress={()=>router.replace(`/requests/${id}`)}/>
+  {!request?.simple&&<Button label={complete?'사진 목록 · 친구 초대':'사진 목록으로'} disabled={busy} onPress={()=>router.replace(`/requests/${id}`)}/>}
   {busy&&<Text style={styles.muted}>준비하는 동안 화면을 유지해주세요. 중단되면 같은 주소에서 목록을 이어갈 수 있어요.</Text>}
  </Page>;
 }

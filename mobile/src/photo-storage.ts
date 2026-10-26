@@ -32,3 +32,11 @@ export async function photoFileUrl(reference:string){
  });
  const url=URL.createObjectURL(blob);urls.set(key,url);return url;
 }
+export async function removePhotoFiles(ids?:string[]){
+ const db=await open();await new Promise<void>((resolve,reject)=>{
+  const tx=db.transaction('files','readwrite'),files=tx.objectStore('files');
+  if(ids)for(const id of ids){files.delete(`${id}:original`);files.delete(`${id}:thumbnail`);}else files.clear();
+  tx.oncomplete=()=>resolve();tx.onabort=()=>reject(tx.error);tx.onerror=()=>reject(tx.error);
+ });
+ for(const [key,url] of urls)if(!ids||ids.some(id=>key===`${id}:original`||key===`${id}:thumbnail`)){URL.revokeObjectURL(url);urls.delete(key);}
+}

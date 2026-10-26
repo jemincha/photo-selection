@@ -1,4 +1,29 @@
-# 사진 셀렉 MVP
+# 설렉 · 사진 셀렉
+
+## 2026-10-23 · 출시 전 개발·검증
+
+**사진 선택 → 친구에게 보내기 → 골라주기 → 결과 결정·iPhone 원본 앨범 저장**의 핵심 흐름과 신고·차단·초대 관리·삭제 코드를 구현했습니다. 하단 네 탭을 보관함 하나로 줄이고 기존 공동 앨범 URL은 호환 경로로 유지합니다. 확정 후 서버 사진은 30일 보관하며 직접 삭제할 수 있습니다.
+
+현재 자동 검사 57개(앱 40·SQL/RLS 9·서버 작업 6·출시 도구 2), lint·앱/Edge 타입 검사·웹 export가 통과했습니다. iOS Hermes 번들도 생성했습니다. 서명된 설치 앱, 실제 서버 또는 Photos 실기기 검증을 뜻하지 않습니다.
+
+Apple Developer·Supabase 프로젝트·실제 안전 검사 API 키와 운영자·문의처는 준비 전입니다. 출시 자료 초안과 공개 정책 페이지 템플릿은 준비했지만 실제 값과 서버·실기기 검증 없이는 제출할 수 없습니다. 심사·배포는 하지 않았습니다.
+
+- [아침 계정 준비 가이드북 · 화면형 체크리스트](docs/morning-setup-guide.html) / [Markdown](docs/morning-setup-guide.md)
+- [Apple 유료 가입 전 iPhone · Expo Go 테스트 안내](docs/iphone-expo-go-guide.md)
+- [2026-10-26 iPhone 테스트 피드백 · 다음 업데이트 검토용](docs/iphone-test-feedback-20261026.md)
+- [심플 개편안](docs/seollek-v2-simple-product-brief.md)
+- [최신 구현·검증 기록](docs/app-store-release.md)
+- [계정 준비 후 연결·운영 절차](release/operations.ko.md)
+- [스토어 설명·심사 노트 초안](release/store-listing.ko.md)
+- [실제 검증 대기 목록](release/review-evidence.json)
+
+로컬 검사: `./scripts/verify.ps1` · 출시 점검: `node scripts/release-check.cjs`(현재 실패가 정상).
+
+서버 migration 네 파일은 파일명 순으로 테스트 환경부터 적용합니다. 공개 정책 페이지는 `release/legal-settings.example.json`을 실제 값으로 채우고 `node scripts/build-legal-site.cjs`로 생성합니다. 생성과 배포는 별개입니다.
+
+## 과거 MVP 기록
+
+아래 설명은 이전 공동 앨범 MVP의 이력입니다. 현재 동작은 위 문서와 출시 기록을 우선합니다.
 
 함께한 여행이나 이벤트의 사진을 앨범에 모으고 서로 골라주는 앱입니다. 닉네임으로 시작하며, 같은 앨범 안에서 내 사진을 요청하고 친구 사진을 셀렉할 수 있습니다.
 

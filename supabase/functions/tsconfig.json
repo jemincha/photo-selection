@@ -1,0 +1,7 @@
+{
+ "compilerOptions":{
+  "strict":true,"noEmit":true,"target":"ES2022","module":"ESNext","moduleResolution":"Bundler","allowImportingTsExtensions":true,"lib":["ES2023","DOM"],"skipLibCheck":true,
+  "paths":{"npm:@supabase/supabase-js@2.117.3":["../../mobile/node_modules/@supabase/supabase-js/dist/index.d.mts"]}
+ },
+ "include":["_shared/*.ts","app-actions/*.ts","maintenance/*.ts","typecheck-globals.d.ts"]
+}

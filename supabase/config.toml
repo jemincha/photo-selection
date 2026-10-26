@@ -1,0 +1,17 @@
+
+[functions.app-actions]
+enabled = true
+verify_jwt = true
+import_map = "./functions/app-actions/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/app-actions/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/app-actions/*.html" ]
+
+[functions.maintenance]
+enabled = true
+# A separate server-only secret is verified in the handler; user JWTs cannot run maintenance.
+verify_jwt = false
+entrypoint = "./functions/maintenance/index.ts"
