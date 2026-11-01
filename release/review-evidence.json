@@ -6,7 +6,7 @@
     {"id":"moderation","status":"pending","evidence":"서버 검사 코드·실패 주입 테스트 작성. 실제 API 키와 탐지·오탐·외부 처리 방침 검토 필요."},
     {"id":"operations","status":"pending","evidence":"운영자·공개 문의 이메일 미정. 신고 대응 담당자와 대기 작업 스케줄러 검증 필요."},
     {"id":"privacy","status":"pending","evidence":"30일 정책 반영. 서버 지역·국외 이전·제공자 보관·백업 삭제·공개 URL 최종 검토 필요."},
-    {"id":"iphone","status":"pending","evidence":"실기기 없음. Photos 제한/거절/전체 권한, HEIC/iCloud·강제종료·중복 방지·VoiceOver·큰 글자 확인 필요."},
+    {"id":"iphone","status":"pending","evidence":"사용자 iPhone Expo Go 기본 기능 테스트 피드백 수집. 준비/저장 지연·UI/제스처 개선 필요. Photos 제한/거절/전체 권한, HEIC/iCloud·강제종료·중복 방지·VoiceOver·큰 글자의 정식 검증은 남아 있음."},
     {"id":"signing","status":"pending","evidence":"Apple Developer 및 EAS 연결·서명된 설치 빌드 검증 필요."},
     {"id":"store","status":"pending","evidence":"실제 빌드 스크린샷·App Privacy·연령등급·심사 접근 정보·스토어 정보 최종 입력 필요."}
   ]

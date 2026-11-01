@@ -1,6 +1,12 @@
 # 설렉 v2 · App Store 출시 기록
 
-## 최신 상태 · 2026-10-26 · Expo Go SDK 58 대응
+## 최신 상태 · 2026-11-01 · 현황 재확인·다음 스프린트 계획
+
+앱 구현 기준은 `568052d`(작업 브랜치 `codex/refactor-upload-queue`) 그대로다. 사용자가 iPhone에서 기본 테스트 기능 수행을 확인했으나 사진 준비·저장 지연, 역할 혼동, UI 복잡도와 대량 셀렉 문제를 보고했다. [교차 검증·다음 스프린트 계획](cross-review-next-sprint-20261101.md)을 정리했으며 기능 수정·main 병합·배포는 하지 않았다.
+
+11월 1일 앱 lint, `tsc --noEmit`, 앱 테스트 40개를 다시 실행해 **각 종료 코드 0, 테스트 40/40**을 확인했다. 출력이 비어 있는 lint도 종료 코드로 통과를 확인했다. 로그는 커밋에서 제외한 `mobile/.expo/status-20261101-{lint,types,tests}.log`에 있다. 아래 10월 26일의 SQL·Edge·출시 도구 검사와 export는 이번 문서 작업에서는 다시 실행하지 않았다. 출시 검증 항목 8개는 계속 pending이다.
+
+## 이전 검증 · 2026-10-26 · Expo Go SDK 58 대응
 
 사용자 iPhone의 Expo Go가 SDK 58을 요구하고 기존 프로젝트 SDK 57을 거절하는 로그를 확인해 Expo 58.0.19·Router 58.0.26·React Native 0.88.0·React 19.3.0과 호환 Expo 모듈로 갱신했다. 파일 저장은 SDK 58에서 비동기로 바뀐 `File.write()` 대신 기존 완료 순서를 유지하는 `writeSync()`로 변경했다. URL 검사는 삭제된 query-string 의존 대신 현재 Router의 실제 파서를 실행한다.
 
