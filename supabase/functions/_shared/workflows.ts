@@ -1,6 +1,6 @@
 export function maintenanceAuthorized(secret:string|undefined,authorization:string){return !!secret&&secret.length>=32&&authorization===`Bearer ${secret}`;}
 export async function moderateContent(title:string,urls:string[],apiKey:string,send:typeof fetch=fetch):Promise<boolean>{
- if(!apiKey||!urls.length||urls.length>30)throw new Error('Safety service is not configured');
+ if(!apiKey||!urls.length||urls.length>100)throw new Error('Safety service is not configured');
  for(let offset=0;offset<urls.length;offset+=5){
   const response=await send('https://api.openai.com/v1/moderations',{
    method:'POST',headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},signal:AbortSignal.timeout(30000),

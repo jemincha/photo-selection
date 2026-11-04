@@ -8,7 +8,7 @@ import {removeUploadSessions} from './upload-queue-storage';
 export async function clearDeviceData(requestId?:string,photoIds?:string[]){
  if(requestId)pendingPhotos.delete(requestId);else pendingPhotos.clear();
  const keys=await AsyncStorage.getAllKeys();
- const remove=keys.filter(key=>requestId?(key.startsWith('seollek-native-upload:')||key.startsWith('seollek-album-save:'))&&key.endsWith(`:${requestId}`):key!=='seollek-deletion-pending'&&(key.startsWith('seollek-')||key.startsWith('photo-selection-')||key==='selection-swipe-hint'));
+ const remove=keys.filter(key=>requestId?(key.startsWith('seollek-native-upload:')||key.startsWith('seollek-album-save:')||key.startsWith('seollek-photo-assets:')||key.startsWith('seollek-extra-picks:'))&&key.endsWith(`:${requestId}`):key!=='seollek-deletion-pending'&&(key.startsWith('seollek-')||key.startsWith('photo-selection-')||key==='selection-swipe-hint'));
  const staged:string[]=[];
  for(const key of remove.filter(k=>k.startsWith('seollek-native-upload:'))){const raw=await AsyncStorage.getItem(key);try{const items=raw?JSON.parse(raw):[];if(Array.isArray(items))for(const item of items)if(typeof item?.id==='string')staged.push(item.id);}catch{/* A broken manifest must not prevent account deletion. */}}
  if(Platform.OS==='web'){await removePhotoFiles(photoIds);await removeUploadSessions(requestId);}

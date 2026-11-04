@@ -36,17 +36,17 @@ function WebUpload({context}:{context:ReturnType<typeof useRequest>}){
  const transport:UploadTransport=(item,onStage)=>{
   let result:Awaited<ReturnType<UploadTransport>>;
   // Also serialize uploads from different request screens in this browser tab.
-  const pending=processing.catch(()=>{}).then(async()=>{const latest=await repo.loadRequest(id);const photo=await repo.upload(latest,store.userId,{uri:'',width:0,height:0,type:'image',mimeType:item.mime,file:item.file,fileName:item.filename,fileSize:item.bytes},item.id,onStage);if(photo?.thumbnail.startsWith('photo-file:'))result={thumbnail:await photoFileUrl(photo.thumbnail)};});
+  const pending=processing.catch(()=>{}).then(async()=>{const photo=await repo.upload(request!,store.userId,{uri:'',width:0,height:0,type:'image',mimeType:item.mime,file:item.file,fileName:item.filename,fileSize:item.bytes},item.id,onStage);if(photo?.thumbnail.startsWith('photo-file:'))result={thumbnail:await photoFileUrl(photo.thumbnail)};});
   processing=pending;return pending.then(()=>result);
  };
- const pick=()=>void picker.run(async()=>{const start=Date.now(),files=await pickWebFiles();setPickerTime(Date.now()-start);if(files.length){if(!state.items.some(item=>item.status!=='done')&&files.length+(request?.photos.length||0)>30)throw new Error('셀렉 하나에는 최대 30장까지 담을 수 있어요.');await queue.add(files.map(itemFor),transport);await store.refresh()}});
+ const pick=()=>void picker.run(async()=>{const start=Date.now(),files=await pickWebFiles();setPickerTime(Date.now()-start);if(files.length){if(!state.items.some(item=>item.status!=='done')&&files.length+(request?.photos.length||0)>100)throw new Error('셀렉 하나에는 최대 100장까지 담을 수 있어요.');await queue.add(files.map(itemFor),transport);await store.refresh()}});
  const resume=()=>void picker.run(async()=>{await queue.resume(transport);await store.refresh()});
  useEffect(()=>{const files=pendingPhotos.get(id)?.web;if(!files)return;pendingPhotos.delete(id);void picker.run(async()=>{await queue.add(files.map(itemFor),transport);await store.refresh()});},[id,queue]); // eslint-disable-line react-hooks/exhaustive-deps
  const done=state.items.filter(item=>item.status==='done'),remaining=state.items.filter(item=>item.status!=='done'),missing=remaining.filter(item=>!item.file),complete=state.items.length>0&&!remaining.length;
  if(request?.simple&&request.publishedAt)return <Page title="링크가 준비됐어요"><Text style={styles.muted}>{request.photos.length}장 · {request.title}</Text><RequestShare request={request}/></Page>;
  const primary=missing.length?'중단된 사진 다시 선택':remaining.length?'남은 사진 이어서 준비하기':complete?'사진 셀렉 시작하기':'사진 선택하고 추가하기';
  return <Page title={complete?'친구의 한 끗이 필요한 사진들':'함께 고를 사진을 추가해요'} footer={request?.simple&&complete?<RequestShare request={request}/>:<Button label={busy?'사진 준비 중…':primary} primary disabled={busy||!state.ready} onPress={()=>{if(missing.length||!state.items.length)pick();else if(remaining.length)resume();else router.replace({pathname:'/requests/[id]/photo',params:{id,photoId:state.items[0]?.id}})}}/>}>
-  <View style={[styles.row,{justifyContent:'space-between'}]}><Text style={[styles.muted,{flex:1}]}>{state.items.length?`${done.length} / ${state.items.length}장 완료`:'선택한 목록을 먼저 보관하고 한 장씩 준비해요. 셀렉당 최대 30장.'}</Text>{request&&<RequestActions request={request} disabled={busy}/>}</View>
+  <View style={[styles.row,{justifyContent:'space-between'}]}><Text style={[styles.muted,{flex:1}]}>{state.items.length?`${done.length} / ${state.items.length}장 완료`:'선택한 목록을 먼저 보관하고 한 장씩 준비해요. 셀렉당 최대 100장.'}</Text>{request&&<RequestActions request={request} disabled={busy}/>}</View>
   {state.restored&&<Text style={styles.text}>중단된 목록을 복원했어요. 이미 완료한 사진은 건너뛰고 이어서 준비할 수 있어요.</Text>}
   {picker.busy&&!state.busy&&<Text style={styles.muted}>사진 보관함에서 파일이 전달되기를 기다리고 있어요. iCloud 사진이면 원본 다운로드 시간이 포함될 수 있어요.</Text>}
   <TaskState busy={busy||!state.ready} error={picker.error||state.error}/><TaskState busy={false} error={store.error}/>

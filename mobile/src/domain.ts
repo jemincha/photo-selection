@@ -7,10 +7,19 @@ export type Reaction = { photoId:string; userId:string; value:Choice };
 export type Comment = { id:string; photoId:string|null; userId:string; body:string; createdAt:string };
 export type Request = { id:string; albumId?:string; simple?:boolean; publishedAt?:string|null; inviteEnabled?:boolean; confirmedAt?:string|null; submissions?:Submission[]; ownerId:string; title:string; inviteToken:string; status:'selecting'|'confirmed'; selectedIds:string[]; createdAt:string; members:Member[]; photos:Photo[]; reactions:Reaction[]; comments:Comment[] };
 export const choiceLabel:Record<Choice,string> = {dislike:'별로',unsure:'글쎄',like:'좋아'};
+export const PHOTO_LIMIT=100;
+export function photoGroups(request:Request,userId:string){
+ const groups:{key:Choice|'unclassified';title:string;photos:Photo[]}[]=[{key:'like',title:'좋아',photos:[]},{key:'unsure',title:'글쎄',photos:[]},{key:'dislike',title:'별로',photos:[]},{key:'unclassified',title:'미분류',photos:[]}];
+ const choices=new Map<string,Choice>();
+ for(const reaction of request.reactions)if(reaction.userId===userId&&!choices.has(reaction.photoId))choices.set(reaction.photoId,reaction.value);
+ for(const photo of request.photos)groups.find(g=>g.key===(choices.get(photo.id)||'unclassified'))!.photos.push(photo);
+ return groups;
+}
+export function selectGroup(selected:string[],ids:string[],include:boolean){return include?[...new Set([...selected,...ids])]:selected.filter(id=>!ids.includes(id));}
 export function assertOpen(request:Request){if(request.status!=='selecting')throw new Error('이미 확정된 요청이에요.');}
 export function assertMember(request:Request,userId:string){if(!request.members.some(m=>m.userId===userId))throw new Error('이 요청에 참여할 권한이 없어요.');}
 export function assertOwner(request:Request,userId:string){assertMember(request,userId);if(request.ownerId!==userId)throw new Error('요청자만 할 수 있는 작업이에요.');}
-export function assertUploadable(request:Request,userId:string){assertOwner(request,userId);assertOpen(request);if(request.simple&&request.publishedAt)throw new Error('이미 보낸 사진은 바꿀 수 없어요. 새 셀렉으로 보내주세요.');if(request.photos.length>=30)throw new Error('셀렉 하나에는 최대 30장까지 담을 수 있어요.');}
+export function assertUploadable(request:Request,userId:string){assertOwner(request,userId);assertOpen(request);if(request.simple&&request.publishedAt)throw new Error('이미 보낸 사진은 바꿀 수 없어요. 새 셀렉으로 보내주세요.');if(request.photos.length>=PHOTO_LIMIT)throw new Error('셀렉 하나에는 최대 100장까지 담을 수 있어요.');}
 export function publishRequest(request:Request,userId:string,title:string):Request{
  assertOwner(request,userId);assertOpen(request);
  if(request.publishedAt)return request;

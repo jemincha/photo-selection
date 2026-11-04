@@ -17,7 +17,7 @@ export class UploadQueue{
  async add(selected:UploadItem[],transport:UploadTransport){
   await this.load();if(this.snapshot.busy)return;
   if(!selected.length)return;
-  if(selected.length>30)throw new Error('한 번에 최대 30장까지 선택해주세요.');
+  if(selected.length>100)throw new Error('한 번에 최대 100장까지 선택해주세요.');
   // On recovery, selecting the whole group again matches unfinished files to
   // their stable IDs. Completed files are skipped; different files aren't added.
   const unfinished=this.snapshot.items.some(item=>item.status!=='done');

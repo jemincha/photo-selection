@@ -61,6 +61,26 @@ test('rotated/revoked invitations cannot admit users; confirmed requests reject 
  await assert.rejects(as(outsider,"select public.join_request($1,'새 친구')",[finalToken]),/unavailable/);
  assert.ok(await scalar(owner,'select confirmed_at from requests where id=$1',[f.id]));
 });
+test('100 photos can be shared and reviewed after confirmation; a 101st photo is rejected by the locked server guard',async()=>{
+ const f=await fixture(),ids=[f.photo];
+ for(let i=1;i<100;i++){
+  const photo=crypto.randomUUID(),filename=`${photo}.jpg`;ids.push(photo);
+  await as(owner,'insert into storage.objects(bucket_id,name) values($1,$2),($1,$3)',['request-photos',`${f.id}/original/${photo}/${filename}`,`${f.id}/thumbnail/${photo}.jpg`]);
+  await as(owner,'select public.register_photo($1,$2,$3,$4,100,100,10,$5)',[photo,f.id,filename,'image/jpeg','a'.repeat(64)]);
+ }
+ const overflow=crypto.randomUUID();
+ await as(owner,'insert into storage.objects(bucket_id,name) values($1,$2),($1,$3)',['request-photos',`${f.id}/original/${overflow}/${overflow}.jpg`,`${f.id}/thumbnail/${overflow}.jpg`]);
+ await assert.rejects(as(owner,'select public.register_photo($1,$2,$3,$4,100,100,10,$5)',[overflow,f.id,`${overflow}.jpg`,'image/jpeg','a'.repeat(64)]),/Maximum 100/);
+ await db.query('select public.complete_moderation($1,$2,$3,true)',[f.id,'100장',[...ids].sort()]);
+ await as(owner,'select public.publish_request($1,$2)',[f.id,'100장']);await as(friend,"select public.join_request($1,'친구')",[f.token]);
+ await as(friend,'select public.set_reaction($1,$2)',[ids[30],'unsure']);
+ await as(owner,'select public.confirm_request($1,$2)',[f.id,ids.slice(0,20)]);
+ assert.equal(await scalar(friend,'select count(*)::int from photos where request_id=$1',[f.id]),100);
+ assert.equal(await scalar(friend,'select value from reactions where photo_id=$1',[ids[30]]),'unsure');
+ assert.equal(await scalar(outsider,'select count(*)::int from photos where request_id=$1',[f.id]),0);
+ await assert.rejects(as(friend,'select public.set_reaction($1,$2)',[ids[30],'like']),/Not allowed/);
+});
+
 test('reports are private; blocks revoke peer access while preserving the owners own photos',async()=>{
  const f=await fixture();await approve(f);await as(friend,"select public.join_request($1,'친구')",[f.token]);
  await assert.rejects(as(outsider,"select public.report_content($1,null,null,'other','')",[f.id]),/Not allowed/);

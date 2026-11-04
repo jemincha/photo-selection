@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {randomId} from './id';
+import {PreviewUrls} from './preview-urls';
 import { File,Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
 import { manipulateAsync,SaveFormat } from 'expo-image-manipulator';
@@ -21,8 +22,7 @@ let blocks:Block[]=[];
 let reports:{requestId:string;photoId:string|null;targetId:string|null;reason:ReportReason;details:string;createdAt:string}[]=[];
 const albumKey='photo-selection-albums-v2';
 let localWrites=Promise.resolve();
-const thumbnailUrls=new Map<string,{url:string;expires:number}>();
-async function thumbnailUrl(path:string){const cached=thumbnailUrls.get(path);if(cached&&cached.expires>Date.now())return cached.url;const signed=checked(await supabase!.storage.from('request-photos').createSignedUrl(path,300));thumbnailUrls.set(path,{url:signed.signedUrl,expires:Date.now()+4*60*1000});return signed.signedUrl;}
+const thumbnailUrls=new PreviewUrls(async paths=>checked(await supabase!.storage.from('request-photos').createSignedUrls(paths,300)).map(row=>({path:row.path||'',url:row.signedUrl||''})));
 async function persist(){const snapshot=JSON.stringify(local),albumSnapshot=JSON.stringify(albums),safety=JSON.stringify({blocks,reports});localWrites=localWrites.catch(()=>{}).then(()=>AsyncStorage.multiSet([[key,snapshot],[albumKey,albumSnapshot],['seollek-safety',safety]]));await localWrites;}
 export async function initialize(){if(!supabase){local=JSON.parse(await AsyncStorage.getItem(key)||'[]');albums=JSON.parse(await AsyncStorage.getItem(albumKey)||'[]');const safety=JSON.parse(await AsyncStorage.getItem('seollek-safety')||'{}');blocks=safety.blocks||[];reports=safety.reports||[];for(const r of local){if(!r.albumId){r.albumId=r.id;albums.push({id:r.id,title:r.title,createdAt:r.createdAt,members:r.members.map(m=>({...m}))});}}await persist();}}
 async function localRequest(r:Request):Promise<Request>{if(Platform.OS!=='web')return r;return {...r,photos:await Promise.all(r.photos.map(async p=>{try{return {...p,thumbnail:await photoFileUrl(p.thumbnail)}}catch{return {...p,thumbnail:'',unavailable:true}}}))};}
@@ -31,7 +31,8 @@ export async function loadRequest(id:string):Promise<Request>{
  if(!supabase){const r=local.find(r=>r.id===id);if(!r)throw new Error('요청을 찾을 수 없어요.');return localRequest(r);}
  const [r,m,p,c,sub]=await Promise.all([supabase.from('requests').select('*').eq('id',id).single(),supabase.from('members').select('*').eq('request_id',id),supabase.from('photos').select('*').eq('request_id',id).order('created_at'),supabase.from('comments').select('*').eq('request_id',id).order('created_at'),supabase.from('submissions').select('*').eq('request_id',id)]);
  const row=checked(r);const photos=checked(p);const reactions=photos.length?checked(await supabase.from('reactions').select('*').in('photo_id',photos.map(p=>p.id))):[];
- const hydrated=await Promise.all(photos.map(async p=>({id:p.id,requestId:id,filename:p.filename,mime:p.mime_type,width:p.width,height:p.height,bytes:p.byte_size,sha256:p.sha256,original:p.original_path,thumbnail:await thumbnailUrl(p.thumbnail_path)})));
+ const urls=await thumbnailUrls.get(photos.map(p=>p.thumbnail_path));
+ const hydrated=photos.map((p,index)=>({id:p.id,requestId:id,filename:p.filename,mime:p.mime_type,width:p.width,height:p.height,bytes:p.byte_size,sha256:p.sha256,original:p.original_path,thumbnail:urls[index]}));
  return {id,albumId:row.album_id,simple:row.simple,publishedAt:row.published_at,inviteEnabled:row.invite_enabled,confirmedAt:row.confirmed_at,submissions:checked(sub).map(s=>({userId:s.user_id,selectedIds:s.selected_ids,createdAt:s.created_at})),ownerId:row.owner_id,title:row.title,inviteToken:row.invite_token,status:row.status,selectedIds:row.selected_ids,createdAt:row.created_at,members:checked(m).map(m=>({userId:m.user_id,nickname:m.nickname})),photos:hydrated,reactions:reactions.map(r=>({photoId:r.photo_id,userId:r.user_id,value:r.value})),comments:checked(c).map(c=>({id:c.id,photoId:c.photo_id,userId:c.user_id,body:c.body,createdAt:c.created_at}))};
 }
 export async function listAlbums():Promise<Album[]>{if(!supabase)return albums;const rows=checked(await supabase.from('albums').select('*').order('created_at',{ascending:false}));return Promise.all(rows.map(async a=>({id:a.id,title:a.title,createdAt:a.created_at,members:checked(await supabase!.from('album_members').select('*').eq('album_id',a.id)).map(m=>({userId:m.user_id,nickname:m.nickname}))})));}
@@ -86,11 +87,12 @@ export async function upload(r:Request,userId:string,asset:UploadAsset,photoId:s
  let thumb:Awaited<ReturnType<typeof manipulateAsync>>;
  try{thumb=await manipulateAsync(asset.uri,[{resize:thumbnailSize(asset.width,asset.height)}],{compress:.75,format:SaveFormat.JPEG});}catch(error){throw uploadError('preview',error,mime);}
  onStage?.(supabase?'transfer':'store');
- if(supabase){const originalPath=`${r.id}/original/${photoId}/${filename}`,thumbnailPath=`${r.id}/thumbnail/${photoId}.jpg`,uploaded:string[]=[];try{checked(await supabase.storage.from('request-photos').upload(originalPath,originalBytes,{contentType:mime}));uploaded.push(originalPath);checked(await supabase.storage.from('request-photos').upload(thumbnailPath,await bytes(thumb.uri),{contentType:'image/jpeg'}));uploaded.push(thumbnailPath);checked(await supabase.rpc('register_photo',{p_id:photoId,p_request:r.id,p_filename:filename,p_mime:mime,p_width:asset.width,p_height:asset.height,p_bytes:originalBytes.byteLength,p_sha256:checksum}));}catch(error){const registered=await supabase.from('photos').select('id').eq('id',photoId);if(!registered.error&&!registered.data?.length&&uploaded.length)await supabase.storage.from('request-photos').remove(uploaded);throw error;}return;}
+ if(supabase){const originalPath=`${r.id}/original/${photoId}/${filename}`,thumbnailPath=`${r.id}/thumbnail/${photoId}.jpg`,uploaded:string[]=[];try{checked(await supabase.storage.from('request-photos').upload(originalPath,originalBytes,{contentType:mime}));uploaded.push(originalPath);checked(await supabase.storage.from('request-photos').upload(thumbnailPath,await bytes(thumb.uri),{contentType:'image/jpeg'}));uploaded.push(thumbnailPath);checked(await supabase.rpc('register_photo',{p_id:photoId,p_request:r.id,p_filename:filename,p_mime:mime,p_width:asset.width,p_height:asset.height,p_bytes:originalBytes.byteLength,p_sha256:checksum}));}catch(error){const registered=await supabase.from('photos').select('id').eq('id',photoId);if(!registered.error&&!registered.data?.length&&uploaded.length)await supabase.storage.from('request-photos').remove(uploaded);throw error;}return {id:photoId,requestId:r.id,filename,mime,width:asset.width,height:asset.height,bytes:originalBytes.byteLength,sha256:checksum,original:originalPath,thumbnail:thumb.uri};}
  onStage?.('store');
  const originalFile=new File(Paths.document,filename);originalFile.writeSync(new Uint8Array(originalBytes));const thumbFile=new File(Paths.document,`${photoId}-thumb.jpg`);new File(thumb.uri).copy(thumbFile);const original=originalFile.uri,thumbnail=thumbFile.uri;
  const photo:Photo={id:photoId,requestId:r.id,filename,mime,width:asset.width,height:asset.height,bytes:originalBytes.byteLength,sha256:checksum,original,thumbnail};
  try{await replace(r.id,current=>{assertUploadable(current,userId);return current.photos.some(p=>p.id===photo.id)?current:{...current,submissions:[],photos:[...current.photos,photo]};});}catch(error){throw uploadError('store',error,mime);}
+ return photo;
 }
 async function uploadWeb(r:Request,userId:string,asset:UploadAsset,photoId:string,mime:string,filename:string,onStage?:(stage:UploadStage)=>void):Promise<Photo>{
  onStage?.('read');let original:Blob;

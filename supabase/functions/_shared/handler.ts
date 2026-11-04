@@ -32,10 +32,10 @@ export async function handleRequest(req:Request,maintenanceOnly:boolean){
    const required=checked(await admin.rpc('claim_safety_check',{p_request:request.id,p_title:body.title,p_version:body.consentVersion}));
    if(!required)return reply({approved:true});
    const photos=checked(await caller.from('photos').select('id,thumbnail_path').eq('request_id',request.id).order('id'));
-   if(!photos.length||photos.length>30)return reply({error:'Prepare 1 to 30 photos'},400);
-   const urls:string[]=[];
+   if(!photos.length||photos.length>100)return reply({error:'Prepare 1 to 100 photos'},400);
    // Only server-selected private previews go to the classifier; never accept client URLs.
-   for(const photo of photos)urls.push(checked(await admin.storage.from('request-photos').createSignedUrl(photo.thumbnail_path,120)).signedUrl);
+   const signed=checked(await admin.storage.from('request-photos').createSignedUrls(photos.map(p=>p.thumbnail_path),300));
+   const urls=signed.map(row=>{if(row.error||!row.signedUrl)throw new Error('Preview signing failed');return row.signedUrl;});
    const approved=await moderateContent(body.title.trim(),urls,env('OPENAI_API_KEY'));
    checked(await admin.rpc('complete_moderation',{p_request:request.id,p_title:body.title.trim(),p_photos:photos.map(p=>p.id),p_approved:approved}));
    return reply({approved});

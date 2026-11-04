@@ -36,3 +36,9 @@ test('recursive storage cleanup re-lists offset zero so pages are never skipped'
   remove:async paths=>{for(const path of paths)remaining.delete(path)},
  });assert.equal(remaining.size,0);
 });
+
+test('all 100 previews are moderated and 101 is rejected',async()=>{
+ const seen:string[]=[];const send:typeof fetch=async(_url,options)=>{seen.push(...JSON.parse(String(options?.body)).input.slice(1).map((v:{image_url:{url:string}})=>v.image_url.url));return Response.json({results:[{flagged:false}]});};
+ const urls=Array.from({length:100},(_,i)=>`private-${i}`);assert.equal(await moderateContent('제목',urls,'test',send),true);assert.deepEqual(seen,urls);
+ await assert.rejects(moderateContent('제목',[...urls,'overflow'],'test',send),/configured/);
+});

@@ -10,15 +10,17 @@ import type {ReportReason} from './safety';
 import {Button,Field,styles,TaskState,useTask} from './ui';
 
 export function RequestActions({request,photoId=null,disabled=false}:{request:Request;photoId?:string|null;disabled?:boolean}){
- const store=useStore(),task=useTask(),[open,setOpen]=useState(false),[action,setAction]=useState<'menu'|'report'|'delete'|'block'>('menu'),[target,setTarget]=useState(''),[reason,setReason]=useState<ReportReason>('privacy'),[details,setDetails]=useState(''),[notice,setNotice]=useState('');
+ const store=useStore(),task=useTask(),[open,setOpen]=useState(false),[safety,setSafety]=useState(false),[action,setAction]=useState<'menu'|'report'|'delete'|'block'>('menu'),[target,setTarget]=useState(''),[reason,setReason]=useState<ReportReason>('privacy'),[details,setDetails]=useState(''),[notice,setNotice]=useState('');
  const owner=request.ownerId===store.userId,peers=request.members.filter(m=>m.userId!==store.userId);
- return <><Pressable accessibilityRole="button" accessibilityLabel="셀렉 관리와 신고" disabled={disabled} accessibilityState={{disabled}} onPress={()=>{setOpen(true);setAction('menu');setNotice('')}} style={{padding:12}}><Text style={styles.badge}>•••</Text></Pressable>
+ return <><Pressable accessibilityRole="button" accessibilityLabel="셀렉 관리와 신고" disabled={disabled} accessibilityState={{disabled}} onPress={()=>{setOpen(true);setAction('menu');setSafety(false);setNotice('')}} style={{padding:12}}><Text style={styles.badge}>•••</Text></Pressable>
  <Modal visible={open} transparent animationType="slide" onRequestClose={()=>{if(!task.busy)setOpen(false)}}><View style={{flex:1,backgroundColor:'#0006',justifyContent:'flex-end'}}><Pressable accessibilityRole="button" accessibilityLabel="관리 메뉴 닫기" disabled={task.busy} style={{flex:1}} onPress={()=>setOpen(false)}/><SafeAreaView accessibilityViewIsModal style={{backgroundColor:'#fcfbf8',borderTopLeftRadius:26,borderTopRightRadius:26,maxHeight:'85%'}} edges={['bottom']}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{padding:24,gap:14}}>
  <Text accessibilityRole="header" style={styles.title}>{action==='report'?'무슨 문제가 있나요?':action==='delete'?'이 셀렉을 삭제할까요?':action==='block'?'이 참여자를 차단할까요?':'셀렉 관리'}</Text>
  {action==='menu'&&<>
-  <Button label={photoId?'이 사진 신고':'셀렉·참여자 신고'} onPress={()=>{setTarget('');setAction('report')}}/>
-  {peers.map(peer=><Button key={peer.userId} label={`${peer.nickname} 차단`} onPress={()=>{setTarget(peer.userId);setAction('block')}}/>)}
   {owner&&<><Text style={styles.muted}>초대를 중지해도 이미 참여한 친구는 계속 볼 수 있어요. 차단은 참여자별로 할 수 있어요.</Text><Button label={request.inviteEnabled===false?'새 링크로 초대 다시 열기':'기존 초대 폐기 · 새 링크 만들기'} disabled={task.busy} onPress={()=>void task.run(async()=>{await repo.manageInvite(request,store.userId,true);await store.refresh();setNotice('기존 링크를 폐기하고 새 링크를 만들었어요. 다시 공유해주세요.');})}/>{request.inviteEnabled!==false&&<Button label="새로운 참여 중지" disabled={task.busy} onPress={()=>void task.run(async()=>{await repo.manageInvite(request,store.userId,false);await store.refresh();setNotice('기존 링크로 새로 참여할 수 없어요.');})}/>}<Button label="셀렉과 서버 사진 삭제" onPress={()=>setAction('delete')}/></>}
+  <Pressable accessibilityRole="button" style={{paddingVertical:14}} onPress={()=>setSafety(!safety)}><Text style={styles.muted}>안전 · 신고와 차단 {safety?"▴":"▾"}</Text></Pressable>
+  {safety&&<>  <Button label={photoId?'이 사진 신고':'셀렉·참여자 신고'} onPress={()=>{setTarget('');setAction('report')}}/>
+  {peers.map(peer=><Button key={peer.userId} label={`${peer.nickname} 차단`} onPress={()=>{setTarget(peer.userId);setAction('block')}}/>)}
+</>}
  </>}
  {action==='report'&&<>
   <Text style={styles.muted}>{photoId?'현재 사진':'이 셀렉'}을 신고해요. 신고자와 신고 내용은 다른 참여자에게 보이지 않아요.</Text>
