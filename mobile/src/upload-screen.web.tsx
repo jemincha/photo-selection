@@ -44,8 +44,8 @@ function WebUpload({context}:{context:ReturnType<typeof useRequest>}){
  useEffect(()=>{const files=pendingPhotos.get(id)?.web;if(!files)return;pendingPhotos.delete(id);void picker.run(async()=>{await queue.add(files.map(itemFor),transport);await store.refresh()});},[id,queue]); // eslint-disable-line react-hooks/exhaustive-deps
  const done=state.items.filter(item=>item.status==='done'),remaining=state.items.filter(item=>item.status!=='done'),missing=remaining.filter(item=>!item.file),complete=state.items.length>0&&!remaining.length;
  if(request?.simple&&request.publishedAt)return <Page title="링크가 준비됐어요"><Text style={styles.muted}>{request.photos.length}장 · {request.title}</Text><RequestShare request={request}/></Page>;
- const primary=missing.length?'중단된 사진 다시 선택':remaining.length?'남은 사진 이어서 준비하기':complete?'사진 셀렉 시작하기':'사진 선택하고 추가하기';
- return <Page title={complete?'친구의 한 끗이 필요한 사진들':'함께 고를 사진을 추가해요'} footer={request?.simple&&complete?<RequestShare request={request}/>:<Button label={busy?'사진 준비 중…':primary} primary disabled={busy||!state.ready} onPress={()=>{if(missing.length||!state.items.length)pick();else if(remaining.length)resume();else router.replace({pathname:'/requests/[id]/photo',params:{id,photoId:state.items[0]?.id}})}}/>}>
+ const primary=missing.length?'중단된 사진 다시 선택':remaining.length?'남은 사진 이어서 준비하기':complete?'이벤트에서 사진 보기':'사진 선택하고 추가하기';
+ return <Page title={complete?'이벤트에 사진을 모았어요':'이벤트에 함께 볼 사진을 추가해요'} footer={request?.simple&&complete?<RequestShare request={request}/>:<Button label={busy?'사진 준비 중…':primary} primary disabled={busy||!state.ready} onPress={()=>{if(missing.length||!state.items.length)pick();else if(remaining.length)resume();else router.replace(`/albums/${request?.albumId}`)}}/>}>
   <View style={[styles.row,{justifyContent:'space-between'}]}><Text style={[styles.muted,{flex:1}]}>{state.items.length?`${done.length} / ${state.items.length}장 완료`:'선택한 목록을 먼저 보관하고 한 장씩 준비해요. 셀렉당 최대 100장.'}</Text>{request&&<RequestActions request={request} disabled={busy}/>}</View>
   {state.restored&&<Text style={styles.text}>중단된 목록을 복원했어요. 이미 완료한 사진은 건너뛰고 이어서 준비할 수 있어요.</Text>}
   {picker.busy&&!state.busy&&<Text style={styles.muted}>사진 보관함에서 파일이 전달되기를 기다리고 있어요. iCloud 사진이면 원본 다운로드 시간이 포함될 수 있어요.</Text>}
@@ -55,7 +55,7 @@ function WebUpload({context}:{context:ReturnType<typeof useRequest>}){
   {complete&&<Button label="사진 더 추가하기" disabled={busy} onPress={pick}/>}
   <Button label={details?'자세한 안내 접기':'처리 시간 · 사진 준비 도움말'} onPress={()=>setDetails(!details)}/>
   {details&&<Text style={styles.muted}>{pickerTime!==null?`사진 보관함 대기 ${seconds(pickerTime)} (직접 고른 시간과 iOS 파일 전달 시간이 함께 포함돼요).\n`:''}이 브라우저에 임시 보관된 사진은 같은 주소에서 다시 열면 복원해요. 파일 보관 전에 중단된 사진은 다시 선택해야 해요. 원본 형식과 품질은 유지하고, 미리보기만 작게 만들어요. HEIC 처리는 Safari 지원 여부에 따라 달라요.</Text>}
-  {!request?.simple&&<Button label={complete?'사진 목록 · 친구 초대':'사진 목록으로'} disabled={busy} onPress={()=>router.replace(`/requests/${id}`)}/>}
+  {!request?.simple&&<Button label="이벤트로 돌아가기" disabled={busy} onPress={()=>router.replace(`/albums/${request?.albumId}`)}/>}
   {busy&&<Text style={styles.muted}>준비하는 동안 화면을 유지해주세요. 중단되면 같은 주소에서 목록을 이어갈 수 있어요.</Text>}
  </Page>;
 }

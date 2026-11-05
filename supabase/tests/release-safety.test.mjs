@@ -121,6 +121,33 @@ test('safety checks require consent, reuse exact approvals and enforce an hourly
  for(let i=0;i<29;i++)await db.query('select public.claim_safety_check($1,$2,$3)',[f.id,'다른 제목','2026-10-22']);
  await assert.rejects(db.query('select public.claim_safety_check($1,$2,$3)',[f.id,'다른 제목','2026-10-22']),/rate limited/);
 });
+test('shared events keep participant uploads together and collection references enforce event membership',async()=>{
+ const id=await scalar(owner,"select public.create_event('A')"),photo=crypto.randomUUID(),filename=`${photo}.jpg`;
+ const album=await scalar(owner,'select album_id from requests where id=$1',[id]);
+ assert.equal(await scalar(owner,'select simple from requests where id=$1',[id]),false);
+ await as(owner,'insert into storage.objects(bucket_id,name) values($1,$2),($1,$3)',['request-photos',`${id}/original/${photo}/${filename}`,`${id}/thumbnail/${photo}.jpg`]);
+ await as(owner,'select public.register_photo($1,$2,$3,$4,100,100,10,$5)',[photo,id,filename,'image/jpeg','a'.repeat(64)]);
+ const token=await scalar(owner,'select invite_token from requests where id=$1',[id]);await approve({id,photo});await as(friend,"select public.join_request($1,'B')",[token]);
+ const second=await scalar(friend,"select public.create_album_request($1,'B의 사진','B')",[album]);assert.equal(await scalar(friend,'select album_id from requests where id=$1',[second]),album);
+ await as(friend,"update albums set title='우리 여행' where id=$1",[album]);assert.equal(await scalar(owner,'select title from albums where id=$1',[album]),'우리 여행');
+ await as(friend,'insert into album_photo_sections values($1,$2,$3) on conflict do nothing',[album,friend,photo]);
+ await as(friend,'insert into album_photo_sections values($1,$2,$3) on conflict do nothing',[album,friend,photo]);
+ assert.equal(await scalar(owner,'select count(*)::int from album_photo_sections where album_id=$1',[album]),1);
+ assert.equal(await scalar(owner,'select request_id from photos where id=$1',[photo]),id);
+ assert.equal(await scalar(friend,"select count(*)::int from storage.objects where name like $1",[`${id}/original/%`]),0);
+ await assert.rejects(as(owner,'insert into album_photo_sections values($1,$2,$3)',[album,friend,photo]),/row-level security/);
+ await assert.rejects(as(outsider,'insert into album_photo_sections values($1,$2,$3)',[album,outsider,photo]),/row-level security/);
+ const other=await scalar(friend,"select public.create_event('B')"),otherAlbum=await scalar(friend,'select album_id from requests where id=$1',[other]);
+ await assert.rejects(as(friend,'insert into album_photo_sections values($1,$2,$3)',[otherAlbum,friend,photo]),/row-level security/);
+ await as(owner,'delete from album_photo_sections where album_id=$1',[album]);assert.equal(await scalar(friend,'select count(*)::int from album_photo_sections where album_id=$1',[album]),1);
+ await as(friend,'delete from album_photo_sections where album_id=$1',[album]);assert.equal(await scalar(friend,'select count(*)::int from album_photo_sections where album_id=$1',[album]),0);
+ await as(friend,'insert into album_photo_sections values($1,$2,$3)',[album,friend,photo]);
+ await as(friend,'select public.block_user($1,$2)',[id,owner]);assert.equal(await scalar(friend,'select count(*)::int from album_photo_sections where album_id=$1',[album]),0);
+ await db.exec('delete from private.blocks');
+ await as(owner,'select public.begin_request_deletion($1)',[id]);assert.equal(await scalar(friend,'select count(*)::int from album_photo_sections where album_id=$1',[album]),0);
+ await db.query("select public.finish_cleanup_data($1,'request')",[id]);assert.equal((await db.query('select * from album_photo_sections where photo_id=$1',[photo])).rows.length,0);
+});
+
 test('account deletion blocks existing JWTs and cleans all FK references before Auth deletion',async()=>{
  const f=await fixture();await db.query("insert into private.bans(user_id,reason) values($1,'test restriction')",[owner]);
  assert.equal(await scalar(owner,'select public.account_status()'),'unavailable');

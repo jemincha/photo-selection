@@ -1,5 +1,5 @@
 export type Choice = 'dislike' | 'unsure' | 'like';
-export type Album = {id:string;title:string;createdAt:string;members:Member[]};
+export type Album = {id:string;title:string;createdAt:string;members:Member[];sectionPhotos?:{userId:string;photoId:string}[]};
 export type Submission = {userId:string;selectedIds:string[];createdAt:string};
 export type Photo = { id:string; requestId:string; filename:string; mime:string; width:number; height:number; bytes:number; sha256?:string; original:string; thumbnail:string; unavailable?:boolean };
 export type Member = { userId:string; nickname:string };

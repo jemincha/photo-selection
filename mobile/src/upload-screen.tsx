@@ -31,7 +31,7 @@ export default function Upload(){const {id,store,request,owner,locked}=useReques
  }
  const pick=()=>void task.run(async()=>{const result=await ImagePicker.launchImageLibraryAsync({mediaTypes:['images'],allowsMultipleSelection:true,allowsEditing:false,selectionLimit:100,quality:1,preferredAssetRepresentationMode:ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Current});if(result.canceled)return;await stage(result.assets)});
  const failed=items.filter(i=>i.status==='failed'),done=items.filter(i=>i.status==='done'),complete=items.length>0&&done.length===items.length;
- return <Page title={complete?'친구의 한 끗이 필요한 사진들':'함께 고를 사진을 추가해요'} footer={failed.length?<Button label={`실패한 ${failed.length}장 다시 시도`} primary disabled={task.busy} onPress={()=>void task.run(()=>process(items))}/>:complete?(request.simple?<RequestShare request={request}/>:<Button label="사진 셀렉 시작하기" primary disabled={task.busy} onPress={()=>router.replace({pathname:'/requests/[id]/photo',params:{id,photoId:request.photos[0]?.id}})}/>):<Button label={task.busy?'사진 준비 중…':'사진 선택하고 추가하기'} primary disabled={task.busy||!ready} onPress={pick}/>}>
+ return <Page title={complete?'이벤트에 사진을 모았어요':'이벤트에 함께 볼 사진을 추가해요'} footer={failed.length?<Button label={`실패한 ${failed.length}장 다시 시도`} primary disabled={task.busy} onPress={()=>void task.run(()=>process(items))}/>:complete?(request.simple?<RequestShare request={request}/>:<Button label="이벤트에서 사진 보기" primary disabled={task.busy} onPress={()=>router.replace(`/albums/${request.albumId}`)}/>):<Button label={task.busy?'사진 준비 중…':'사진 선택하고 추가하기'} primary disabled={task.busy||!ready} onPress={pick}/>}>
  <View style={[styles.row,{justifyContent:'space-between'}]}><Text style={[styles.muted,{flex:1}]}>{items.length?`${done.length} / ${items.length}장 완료`:'선택하면 바로 준비를 시작해요. 셀렉당 최대 100장.'}</Text><RequestActions request={request} disabled={task.busy}/></View>
  {!ready&&!!task.error&&<Button label="사진 준비 기록 다시 읽기" disabled={task.busy} onPress={()=>void task.run(async()=>{setItems(restoreNativeItems(await AsyncStorage.getItem(key)));setReady(true);})}/>}
  <TaskState {...task}/><TaskState busy={false} error={store.error}/>
@@ -41,7 +41,7 @@ export default function Upload(){const {id,store,request,owner,locked}=useReques
  {complete&&<Button label="사진 더 추가하기" disabled={task.busy} onPress={pick}/>}
  <Button label={details?'자세한 안내 접기':'사진 준비 도움말 · 상세 정보'} onPress={()=>setDetails(!details)}/>
  {details&&<Text style={styles.muted}>원본 형식과 품질을 보관하고 미리보기는 따로 만들어요. 한 장 최대 25MB. HEIC/HEIF는 브라우저에서 미리보기 생성이 가능해야 해요. iCloud 사진이 잘 안 되면 원본을 내려받은 뒤 1~3장씩 시도해주세요.</Text>}
- {!request.simple&&<Button label={complete?'사진 목록 · 친구 초대':'사진 목록으로'} disabled={task.busy} onPress={()=>router.replace(`/requests/${id}`)}/>}
+ {!request.simple&&<Button label="이벤트로 돌아가기" disabled={task.busy} onPress={()=>router.replace(`/albums/${request.albumId}`)}/>}
  {task.busy&&<Text style={styles.muted}>사진을 준비하는 동안 이 화면을 유지해주세요.</Text>}
  </Page>;
 }

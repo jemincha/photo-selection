@@ -15,6 +15,7 @@ import {visibleRequests,validateReport} from './safety';
 import type {Block,ReportReason} from './safety';
 import {clearDeviceData} from './device-cleanup';
 import {deleteAccountData} from './account-deletion';
+import {setSectionPhoto} from './event-domain';
 const key='photo-selection-mvp-v1';
 let local:Request[]=[];
 let albums:Album[]=[];
@@ -35,7 +36,27 @@ export async function loadRequest(id:string):Promise<Request>{
  const hydrated=photos.map((p,index)=>({id:p.id,requestId:id,filename:p.filename,mime:p.mime_type,width:p.width,height:p.height,bytes:p.byte_size,sha256:p.sha256,original:p.original_path,thumbnail:urls[index]}));
  return {id,albumId:row.album_id,simple:row.simple,publishedAt:row.published_at,inviteEnabled:row.invite_enabled,confirmedAt:row.confirmed_at,submissions:checked(sub).map(s=>({userId:s.user_id,selectedIds:s.selected_ids,createdAt:s.created_at})),ownerId:row.owner_id,title:row.title,inviteToken:row.invite_token,status:row.status,selectedIds:row.selected_ids,createdAt:row.created_at,members:checked(m).map(m=>({userId:m.user_id,nickname:m.nickname})),photos:hydrated,reactions:reactions.map(r=>({photoId:r.photo_id,userId:r.user_id,value:r.value})),comments:checked(c).map(c=>({id:c.id,photoId:c.photo_id,userId:c.user_id,body:c.body,createdAt:c.created_at}))};
 }
-export async function listAlbums():Promise<Album[]>{if(!supabase)return albums;const rows=checked(await supabase.from('albums').select('*').order('created_at',{ascending:false}));return Promise.all(rows.map(async a=>({id:a.id,title:a.title,createdAt:a.created_at,members:checked(await supabase!.from('album_members').select('*').eq('album_id',a.id)).map(m=>({userId:m.user_id,nickname:m.nickname}))})));}
+export async function listAlbums():Promise<Album[]>{if(!supabase)return albums;const rows=checked(await supabase.from('albums').select('*').order('created_at',{ascending:false}));const refs=checked(await supabase.from('album_photo_sections').select('album_id,user_id,photo_id'));return Promise.all(rows.map(async a=>({id:a.id,title:a.title,createdAt:a.created_at,sectionPhotos:refs.filter(ref=>ref.album_id===a.id).map(ref=>({userId:ref.user_id,photoId:ref.photo_id})),members:checked(await supabase!.from('album_members').select('*').eq('album_id',a.id)).map(m=>({userId:m.user_id,nickname:m.nickname}))})));}
+export async function createEvent(userId:string,nickname:string){
+ if(!nickname.trim()||nickname.trim().length>20)throw new Error('닉네임을 1~20자로 입력해주세요.');
+ if(supabase)return checked(await supabase.rpc('create_event',{p_nickname:nickname.trim()})) as string;
+ const id=randomId(),albumId=randomId(),createdAt=new Date().toISOString(),members=[{userId,nickname:nickname.trim()}],previous=local,previousAlbums=albums;
+ albums=[{id:albumId,title:'함께한 순간',createdAt,members},...albums];
+ local=[{id,albumId,submissions:[],ownerId:userId,title:`${nickname.trim()}의 사진`,inviteToken:randomId(),status:'selecting',selectedIds:[],createdAt,members,photos:[],reactions:[],comments:[]},...local];
+ try{await persist();return id;}catch(error){local=previous;albums=previousAlbums;throw error;}
+}
+export async function renameEvent(event:Album,userId:string,title:string){
+ const text=title.trim();if(!text||text.length>60)throw new Error('이벤트 이름을 1~60자로 입력해주세요.');
+ if(!event.members.some(m=>m.userId===userId))throw new Error('이벤트 참여가 필요해요.');
+ if(supabase){const rows=checked(await supabase.from('albums').update({title:text}).eq('id',event.id).select('id'));if(!rows.length)throw new Error('이벤트 이름을 바꿀 권한이 없어요.');return;}
+ const previous=albums;albums=albums.map(a=>a.id===event.id?{...a,title:text}:a);try{await persist();}catch(error){albums=previous;throw error;}
+}
+export async function collectEventPhoto(event:Album,userId:string,photoId:string,include:boolean){
+ const requests=supabase?await listRequests():visibleRequests(local,userId,blocks),next=setSectionPhoto(event,requests,userId,photoId,include);
+ if(include&&!next.sectionPhotos?.some(ref=>ref.userId===userId&&ref.photoId===photoId))return;
+ if(supabase){if(include)checked(await supabase.from('album_photo_sections').upsert({album_id:event.id,user_id:userId,photo_id:photoId},{onConflict:'album_id,user_id,photo_id',ignoreDuplicates:true}));else checked(await supabase.from('album_photo_sections').delete().eq('album_id',event.id).eq('user_id',userId).eq('photo_id',photoId));return;}
+ const previous=albums;albums=albums.map(a=>a.id===event.id?setSectionPhoto(a,requests,userId,photoId,include):a);try{await persist();}catch(error){albums=previous;throw error;}
+}
 export async function createAlbum(userId:string,title:string,nickname:string){if(!title.trim()||title.trim().length>60)throw new Error('앨범 이름을 1~60자로 입력해주세요.');if(!nickname.trim())throw new Error('닉네임을 먼저 설정해주세요.');if(supabase)return checked(await supabase.rpc('create_album',{p_title:title.trim(),p_nickname:nickname.trim()})) as string;const id=randomId();albums=[{id,title:title.trim(),createdAt:new Date().toISOString(),members:[{userId,nickname}]},...albums];await persist();return id;}
 export async function createRequest(userId:string,title:string,nickname:string,albumId:string){if(!title.trim()||title.trim().length>60)throw new Error('제목을 1~60자로 입력해주세요.');if(!nickname.trim()||nickname.trim().length>20)throw new Error('닉네임을 1~20자로 입력해주세요.');if(supabase)return checked(await supabase.rpc('create_album_request',{p_album:albumId,p_title:title.trim(),p_nickname:nickname.trim()})) as string;
  const album=albums.find(a=>a.id===albumId);if(!album?.members.some(m=>m.userId===userId))throw new Error('앨범 참여가 필요해요.');album.members=album.members.map(m=>m.userId===userId?{...m,nickname:nickname.trim()}:m);const id=randomId();local=[{id,albumId,submissions:[],ownerId:userId,title:title.trim(),inviteToken:randomId(),status:'selecting',selectedIds:[],createdAt:new Date().toISOString(),members:album.members.map(m=>({...m})),photos:[],reactions:[],comments:[]},...local];await persist();return id;}
@@ -134,7 +155,7 @@ export async function blockUser(r:Request,userId:string,targetId:string){
 export async function deleteRequest(r:Request,userId:string){
  assertOwner(r,userId);
  if(supabase){checked(await supabase.rpc('begin_request_deletion',{p_request:r.id}));let pending=false;try{const result=checked(await supabase.functions.invoke('app-actions',{body:{action:'cleanup'}}));pending=!!result.pending;}catch{pending=true;}await clearDeviceData(r.id,r.photos.map(p=>p.id));return {pending};}
- await clearDeviceData(r.id,r.photos.map(p=>p.id));local=local.filter(item=>item.id!==r.id);albums=albums.filter(a=>a.id!==r.albumId||local.some(item=>item.albumId===a.id));reports=reports.filter(item=>item.requestId!==r.id);await persist();return {pending:false};
+ await clearDeviceData(r.id,r.photos.map(p=>p.id));local=local.filter(item=>item.id!==r.id);albums=albums.filter(a=>a.id!==r.albumId||local.some(item=>item.albumId===a.id)).map(a=>({...a,sectionPhotos:a.sectionPhotos?.filter(ref=>!r.photos.some(photo=>photo.id===ref.photoId))}));reports=reports.filter(item=>item.requestId!==r.id);await persist();return {pending:false};
 }
 export async function accountStatus():Promise<'active'|'deleting'|'unavailable'>{return supabase?checked(await supabase.rpc('account_status')):'active';}
 export async function deleteAccount(){
