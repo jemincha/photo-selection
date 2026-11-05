@@ -43,7 +43,7 @@ test('a queue write failure never turns an unpersisted original into a completed
  const restored=new UploadQueue(storage);await restored.load();assert.equal(restored.getSnapshot().items.length,1);assert.equal(restored.getSnapshot().items[0].filename,'too-large.jpg');
 });
 test('thumbnail dimensions bound both portrait and landscape images and do not upscale',()=>{
- assert.deepEqual(thumbnailSize(4032,3024),{width:720,height:540});assert.deepEqual(thumbnailSize(3024,4032),{width:540,height:720});assert.deepEqual(thumbnailSize(200,100),{width:200,height:100});
+ assert.deepEqual(thumbnailSize(4032,3024),{width:1600,height:1200});assert.deepEqual(thumbnailSize(3024,4032),{width:1200,height:1600});assert.deepEqual(thumbnailSize(200,100),{width:200,height:100});
 });
 
 test('add and resume release the busy flag after a manifest failure and allow retry',async()=>{

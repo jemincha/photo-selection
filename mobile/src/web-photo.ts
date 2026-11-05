@@ -1,4 +1,5 @@
-export function thumbnailSize(width:number,height:number,max=720){
+// shortcut: list/detail share a preview; split assets if 100-photo device tests show memory pressure.
+export function thumbnailSize(width:number,height:number,max=1600){
  if(!width||!height)throw new Error('사진 크기를 읽지 못했어요.');
  const scale=Math.min(1,max/Math.max(width,height));
  return {width:Math.max(1,Math.round(width*scale)),height:Math.max(1,Math.round(height*scale))};
