@@ -38,3 +38,10 @@ test('native digest adapter preserves binary SHA-256; OS implementation remains 
  const native=await import(`data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(source)).toString('base64')}`);
  for(const bytes of [new Uint8Array(),new TextEncoder().encode('설렉'),new Uint8Array([0,128,255,1])])assert.equal(await native.sha256(bytes.buffer),createHash('sha256').update(bytes).digest('hex'));
 });
+
+
+test('support feedback validates type and length, retaining a trimmed message',async()=>{
+ const {feedbackInput}=await import('../src/feedback.ts');
+ assert.deepEqual(feedbackInput('suggestion','  사진 순서를 바꾸고 싶어요  '),{kind:'suggestion',body:'사진 순서를 바꾸고 싶어요'});
+ for(const [kind,body] of [['other','valid message'],['bug','짧음'],['bug','x'.repeat(2001)]])assert.throws(()=>feedbackInput(kind,body));
+});

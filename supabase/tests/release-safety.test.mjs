@@ -148,6 +148,96 @@ test('shared events keep participant uploads together and collection references 
  await db.query("select public.finish_cleanup_data($1,'request')",[id]);assert.equal((await db.query('select * from album_photo_sections where photo_id=$1',[photo])).rows.length,0);
 });
 
+async function eventFixture(uid=owner){
+ const id=await scalar(uid,"select public.create_event('사진 주인')"),photo=crypto.randomUUID(),filename=`${photo}.jpg`;
+ await as(uid,'insert into storage.objects(bucket_id,name) values($1,$2),($1,$3)',['request-photos',`${id}/original/${photo}/${filename}`,`${id}/thumbnail/${photo}.jpg`]);
+ await as(uid,'select public.register_photo($1,$2,$3,$4,100,100,10,$5)',[photo,id,filename,'image/jpeg','a'.repeat(64)]);
+ await db.query('select public.complete_moderation($1,$2,$3,true)',[id,'공유 사진',[photo]]);await as(uid,'select public.publish_request($1,$2)',[id,'공유 사진']);
+ return {id,photo,album:await scalar(uid,'select album_id from requests where id=$1',[id]),token:await scalar(uid,'select invite_token from requests where id=$1',[id])};
+}
+test('friend profiles persist after shared event deletion and direct invitations require the recipient to accept',async()=>{
+ const old=await eventFixture();await as(friend,"select public.join_request($1,'B')",[old.token]);
+ assert.ok(await scalar(owner,'select exists(select 1 from friend_profiles where friend_id=$1)',[friend]));
+ assert.equal(await scalar(outsider,'select count(*)::int from friend_profiles'),0);
+ await assert.rejects(as(owner,"insert into friend_profiles values($1,$2,'위조')",[owner,outsider]),/permission denied/);
+ await as(owner,'select public.begin_request_deletion($1)',[old.id]);await db.query("select public.finish_cleanup_data($1,'request')",[old.id]);
+ assert.ok(await scalar(owner,'select exists(select 1 from friend_profiles where friend_id=$1)',[friend]));
+ const f=await eventFixture();await assert.rejects(as(outsider,'select public.invite_event_friend($1,$2)',[f.album,friend]),/Not allowed/);
+ await as(owner,'select public.invite_event_friend($1,$2)',[f.album,friend]);await as(owner,'select public.invite_event_friend($1,$2)',[f.album,friend]);
+ const rows=(await as(friend,"select * from event_invitations where album_id=$1 and status='pending'",[f.album])).rows;assert.equal(rows.length,1);
+ assert.equal(await scalar(friend,'select count(*)::int from photos where request_id=$1',[f.id]),0);
+ await assert.rejects(as(owner,"select public.respond_event_invite($1,true,'위조')",[rows[0].id]),/Invalid invitation/);
+ await as(friend,"select public.respond_event_invite($1,true,'B')",[rows[0].id]);assert.equal(await scalar(friend,'select count(*)::int from photos where request_id=$1',[f.id]),1);
+ await as(friend,'select public.block_user($1,$2)',[f.id,owner]);assert.equal(await scalar(friend,'select count(*)::int from friend_profiles where friend_id=$1',[owner]),0);await db.exec('delete from private.blocks');
+});
+test('self voting is rejected and completion waits for every upload batch before archiving',async()=>{
+ const f=await eventFixture();await as(friend,"select public.join_request($1,'B')",[f.token]);
+ await assert.rejects(as(owner,"select public.set_reaction($1,'like')",[f.photo]),/Self voting/);
+ await db.query("insert into reactions values($1,$2,'like')",[f.photo,owner]);
+ await assert.rejects(as(owner,'select public.submit_selection($1)',[f.id]),/Self voting/);
+ await as(friend,"select public.set_reaction($1,'unsure')",[f.photo]);await as(friend,'select public.submit_selection($1)',[f.id]);
+ const second=await scalar(friend,"select public.create_album_request($1,'B의 사진','B')",[f.album]);
+ await as(owner,'select public.confirm_request($1,$2)',[f.id,[f.photo]]);assert.equal(await scalar(owner,'select completed_at from albums where id=$1',[f.album]),null);
+ const photo=crypto.randomUUID();await as(friend,'insert into storage.objects(bucket_id,name) values($1,$2),($1,$3)',['request-photos',`${second}/original/${photo}/${photo}.jpg`,`${second}/thumbnail/${photo}.jpg`]);
+ await as(friend,'select public.register_photo($1,$2,$3,$4,100,100,10,$5)',[photo,second,`${photo}.jpg`,'image/jpeg','a'.repeat(64)]);
+ await db.query('select public.complete_moderation($1,$2,$3,true)',[second,'B의 사진',[photo]]);await as(friend,"select public.publish_request($1,'B의 사진')",[second]);
+ await as(friend,'select public.confirm_request($1,$2)',[second,[photo]]);assert.ok(await scalar(owner,'select completed_at from albums where id=$1',[f.album]));
+ await assert.rejects(as(owner,"select public.create_album_request($1,'추가','A')",[f.album]),/Event closed/);
+});
+test('friend invitation admission rechecks capacity and closure cancels pending invitations',async()=>{
+ const f=await eventFixture(),fourth=crypto.randomUUID();await db.query('insert into auth.users values($1)',[fourth]);
+ await as(owner,'select public.invite_event_friend($1,$2)',[f.album,friend]);
+ const invitation=await scalar(friend,"select id from event_invitations where album_id=$1 and status='pending'",[f.album]);
+ await assert.rejects(as(friend,"insert into event_invitations(album_id,inviter_id,invitee_id,title,inviter_name) values($1,$2,$3,'위조','위조')",[f.album,owner,friend]),/permission denied/);
+ await as(outsider,"select public.join_request($1,'C')",[f.token]);await as(fourth,"select public.join_request($1,'D')",[f.token]);
+ await assert.rejects(as(friend,"select public.respond_event_invite($1,true,'B')",[invitation]),/Album is full/);
+ assert.equal(await scalar(friend,'select status from event_invitations where id=$1',[invitation]),'pending');
+ await as(owner,'select public.close_event($1)',[f.album]);assert.equal(await scalar(friend,'select status from event_invitations where id=$1',[invitation]),'declined');
+ await assert.rejects(as(friend,"select public.respond_event_invite($1,true,'B')",[invitation]),/Invalid invitation/);
+});
+test('manual closure is creator-only and stops uploads, votes and link admission',async()=>{
+ const f=await eventFixture();await as(friend,"select public.join_request($1,'B')",[f.token]);
+ await assert.rejects(as(friend,'select public.close_event($1)',[f.album]),/Not allowed/);await as(owner,'select public.close_event($1)',[f.album]);
+ assert.ok(await scalar(owner,'select closed_at from albums where id=$1',[f.album]));
+ await assert.rejects(as(friend,"select public.set_reaction($1,'like')",[f.photo]),/Not allowed/);
+ await assert.rejects(as(outsider,"select public.join_request($1,'C')",[f.token]),/Event closed/);
+ await assert.rejects(as(owner,"insert into storage.objects(bucket_id,name) values('request-photos',$1)",[`${f.id}/thumbnail/new.jpg`]),/row-level security/);
+ await as(owner,'select public.begin_request_deletion($1)',[f.id]);
+});
+
+test('support tickets are private, validated and rate limited per signed-in user',async()=>{
+ await assert.rejects(as(owner,"select public.submit_feedback('bug','짧음')"),/Invalid feedback/);
+ await assert.rejects(as(owner,"select public.submit_feedback('other','충분히 긴 피드백')"),/Invalid feedback/);
+ const id=await scalar(owner,"select public.submit_feedback('bug','  사진이 로딩되지 않아요  ')");
+ assert.equal((await db.query('select body from private.support_feedback where id=$1',[id])).rows[0].body,'사진이 로딩되지 않아요');
+ await assert.rejects(as(friend,'select * from private.support_feedback'),/permission denied/);
+ for(let i=1;i<10;i++)await as(owner,"select public.submit_feedback('suggestion','사진 순서를 바꾸고 싶어요')");
+ await assert.rejects(as(owner,"select public.submit_feedback('bug','다시 보내는 피드백')"),/rate limited/);
+ await as(friend,"select public.submit_feedback('suggestion','친구의 제안사항입니다')");
+});
+
+test('history reset deletes own uploads and participation while keeping identity, friends and peer photos',async()=>{
+ const own=await eventFixture(),peer=await eventFixture(friend);
+ await as(friend,"select public.join_request($1,'B')",[own.token]);
+ await as(owner,"select public.join_request($1,'A')",[peer.token]);
+ await as(owner,"select public.set_reaction($1,'like')",[peer.photo]);
+ await as(owner,'select public.submit_selection($1)',[peer.id]);
+ await as(owner,'select public.clear_event_history()');await as(owner,'select public.clear_event_history()');
+ assert.equal(await scalar(owner,'select public.account_status()'),'active');
+ assert.ok((await db.query('select id from auth.users where id=$1',[owner])).rows.length);
+ assert.ok(await scalar(owner,'select exists(select 1 from friend_profiles where friend_id=$1)',[friend]));
+ assert.equal(await scalar(owner,'select count(*)::int from albums'),0);
+ assert.equal(await scalar(owner,'select count(*)::int from requests'),0);
+ assert.ok((await db.query('select deleted_at from requests where id=$1',[own.id])).rows[0].deleted_at);
+ assert.equal((await db.query("select count(*)::int n from private.cleanup_jobs where id=$1 and kind='request'",[own.id])).rows[0].n,1);
+ assert.equal((await db.query('select count(*)::int n from reactions where user_id=$1',[owner])).rows[0].n,0);
+ assert.equal((await db.query('select count(*)::int n from submissions where user_id=$1',[owner])).rows[0].n,0);
+ assert.equal(await scalar(friend,'select count(*)::int from photos where id=$1',[peer.photo]),1);
+ await db.query("select public.finish_cleanup_data($1,'request')",[own.id]);
+ assert.equal((await db.query('select count(*)::int n from photos where request_id=$1',[own.id])).rows[0].n,0);
+ assert.equal(await scalar(friend,'select count(*)::int from photos where id=$1',[peer.photo]),1);
+});
+
 test('account deletion blocks existing JWTs and cleans all FK references before Auth deletion',async()=>{
  const f=await fixture();await db.query("insert into private.bans(user_id,reason) values($1,'test restriction')",[owner]);
  assert.equal(await scalar(owner,'select public.account_status()'),'unavailable');

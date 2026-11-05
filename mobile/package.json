@@ -43,7 +43,7 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "lint": "expo lint",
-    "test": "node --experimental-strip-types --test tests/domain.test.ts tests/account-deletion.test.ts tests/integrity.test.ts tests/photo-storage.test.ts tests/upload-queue.test.ts tests/save-album.test.ts tests/native-upload-state.test.ts tests/safety.test.ts tests/release-config.test.cjs tests/url-decoder.test.cjs tests/feedback.test.ts tests/photo-view.test.ts tests/event.test.ts",
+    "test": "node --experimental-strip-types --test tests/domain.test.ts tests/account-deletion.test.ts tests/integrity.test.ts tests/photo-storage.test.ts tests/upload-queue.test.ts tests/save-album.test.ts tests/native-upload-state.test.ts tests/safety.test.ts tests/release-config.test.cjs tests/url-decoder.test.cjs tests/feedback.test.ts tests/photo-view.test.ts tests/event.test.ts tests/ui-polish.test.ts",
     "export:web": "expo export --platform web"
   },
   "private": true,

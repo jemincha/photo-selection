@@ -1,1 +1,1 @@
-export {AlbumsScreen as default} from '../../main-screens';
+export {default} from '../../archive-screen';

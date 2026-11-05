@@ -4,8 +4,9 @@ import {useRequest} from '../../../request-hook';
 import {selectionSummary,choiceLabel,Choice} from '../../../domain';
 import * as repo from '../../../repository';
 import {Page,Button,PhotoImage,styles,TaskState,useTask} from '../../../ui';
-export default function Review(){const {id,store,request,locked}=useRequest(),task=useTask();
+export default function Review(){const {id,store,request,locked,owner}=useRequest(),task=useTask();
  if(!request)return <Page title="내 조합 확인"><TaskState busy={store.loading} error={store.error}/></Page>;
+ if(owner)return <Page title="내 사진 최종 선택"><Text style={styles.text}>내 사진에는 투표하지 않아요.</Text><Button label="최종 선택" primary onPress={()=>router.replace(`/requests/${id}/result`)}/></Page>;
  const {remaining,liked:photos,counts}=selectionSummary(request,store.userId);
  const open=(photoId:string)=>router.push({pathname:'/requests/[id]/photo',params:{id,photoId}});
  return <Page title="이 조합으로 보낼까요?" footer={locked?<Button label="확정 결과 보기" primary onPress={()=>router.replace(`/requests/${id}/result`)}/>:<Button label={remaining.length?`미분류 ${remaining.length}장 이어서 고르기`:'셀렉 제출하기'} primary disabled={task.busy||!request.photos.length} onPress={()=>{if(remaining.length)open(remaining[0].id);else void task.run(async()=>{await repo.submit(request,store.userId);await store.refresh();router.replace(`/requests/${id}/submitted`)})}}/>}>

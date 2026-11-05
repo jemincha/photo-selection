@@ -1,4 +1,22 @@
-import type {Album,Photo,Request} from './domain';
+import type {Album,Photo,Request,Choice} from './domain';
+
+export function eventKind(event:Album,requests:Request[],userId:string){
+ const uploaded=requests.filter(r=>r.albumId===event.id&&r.photos.length),own=uploaded.some(r=>r.ownerId===userId),others=uploaded.some(r=>r.ownerId!==userId);
+ return own&&others?'함께한 이벤트':own?'보낸 요청':others?'받은 요청':event.ownerId===userId?'보낸 요청':'받은 요청';
+}
+export function eventArchived(event:Album,requests:Request[]){
+ if(event.closedAt||event.completedAt)return true;
+ if('completedAt' in event)return false;
+ const batches=requests.filter(r=>r.albumId===event.id);
+ return batches.length>0&&batches.every(r=>r.photos.length>0&&r.status==='confirmed');
+}
+export function friendVotes(request:Request,photoId:string){
+ const counts:Record<Choice,number>={like:0,unsure:0,dislike:0};
+ for(const member of request.members.filter(m=>m.userId!==request.ownerId)){const vote=request.reactions.find(r=>r.photoId===photoId&&r.userId===member.userId);if(vote)counts[vote.value]++;}
+ // Conservative grouping keeps mixed votes visible instead of hiding disagreement.
+ const group:Choice|'unclassified'=counts.like?'like':counts.unsure?'unsure':counts.dislike?'dislike':'unclassified';
+ return {counts,group};
+}
 
 export type EventPhoto={photo:Photo;request:Request;uploadedBy:string;brought:boolean};
 export function eventSections(event:Album,requests:Request[]){

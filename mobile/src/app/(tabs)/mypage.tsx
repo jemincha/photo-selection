@@ -1,1 +1,1 @@
-export {MyPageScreen as default} from '../../main-screens';
+export {default} from '../../settings-screen';

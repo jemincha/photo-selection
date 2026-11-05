@@ -1,1 +1,1 @@
-export {FriendsScreen as default} from '../../main-screens';
+export {default} from '../../friends-screen';
